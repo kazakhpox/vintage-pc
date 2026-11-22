@@ -1,0 +1,8 @@
+freedoom/cartridge.json
+freedoom/index.html
+freedoom/doom-net.js
+freedoom/default.cfg
+freedoom/LICENSES.md
+freedoom/websockets-doom.js
+freedoom/websockets-doom.wasm
+freedoom/freedoom2.wad

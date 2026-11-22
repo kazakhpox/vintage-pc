@@ -12,6 +12,7 @@ import net.neoforged.neoforge.common.NeoForge;
 public final class VintagePCClient {
     public VintagePCClient(IEventBus modBus) {
         PcClient.init();
+        BuiltinCartridges.installAsync(LanBridge.dataRoot().resolve("cartridges"));
         modBus.addListener((EntityRenderersEvent.RegisterRenderers e) ->
                 e.registerBlockEntityRenderer(VintagePC.RETRO_PC_BE.get(), MonitorRenderer::new));
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingIn e) -> LanBridge.onLogin());

@@ -1,0 +1,9 @@
+{
+  "name": "Freedoom",
+  "icon": "👹",
+  "engine": "html",
+  "html": { "entry": "index.html" },
+  "net": { "mode": "custom" },
+  "width": 680, "height": 520,
+  "builtin": 1
+}

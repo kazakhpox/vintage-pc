@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Freedoom</title>
+<link rel="stylesheet" href="/web/lib/98.css"><link rel="stylesheet" href="/web/player.css">
+<style>
+  #canvas { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; image-rendering: pixelated; outline: none; }
+  #lobby .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  #status { position: absolute; left: 8px; bottom: 6px; color: #8f8; font: 12px monospace; z-index: 5; text-shadow: 1px 1px #000; }
+</style></head><body>
+<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<div id="status"></div>
+<div id="lobby"><div class="window"><div class="title-bar"><div class="title-bar-text">👹 Freedoom — сеть «<span id="net"></span>»</div></div>
+  <div class="window-body">
+    <div class="row"><button id="solo">Одиночная игра</button>
+      <select id="skill"><option value="2">Легко</option><option value="3" selected>Нормально</option><option value="4">Сложно</option></select></div>
+    <fieldset><legend>Создать сетевую игру</legend>
+      <div class="row"><select id="mode"><option value="deathmatch">Дезматч</option><option value="altdeath">Дезматч 2.0</option><option value="coop">Кооператив</option></select>
+        <label>Карта <input id="map" value="1" size="2"></label></div>
+      <div class="row"><button id="host">Создать</button> <small>когда все подключатся — ПРОБЕЛ</small></div>
+    </fieldset>
+    <p>Игры в сети:</p><ul id="hosts"></ul>
+  </div></div></div>
+<script src="/web/vpc-net.js"></script>
+<script src="doom-net.js"></script>
+<script>
+/*
+ * Freedoom (BSD) на Chocolate Doom (WASM). Сетевая игра — через сервер Minecraft:
+ * лобби в комнате doom-<группа>, сама партия — в Ethernet-сегменте <группа>.doom.<хост>.
+ */
+const q = new URLSearchParams(location.search), net = q.get('net') || 'home';
+document.getElementById('net').textContent = net;
+const lobby = VPCNet.room('doom-' + net), hosts = new Map();
+let mode = null, hosting = null;
+const status = (t) => document.getElementById('status').textContent = t || '';
+
+function launch(extra, segment) {
+  document.getElementById('lobby').hidden = true;
+  if (segment) VPCDoomNet.install(segment);
+  const args = ['-iwad', 'freedoom2.wad', '-window', '-nogui', '-nomusic', '-config', 'default.cfg', '-servername', 'vintagepc'].concat(extra);
+  window.Module = {
+    canvas: document.getElementById('canvas'), noInitialRun: true,
+    print: (t) => { console.log(t); if (/waiting|connect|player|uid/i.test(t)) status(t); },
+    printErr: (t) => console.warn(t),
+    preRun: () => {
+      Module.FS.createPreloadedFile('', 'freedoom2.wad', 'freedoom2.wad', true, true);
+      Module.FS.createPreloadedFile('', 'default.cfg', 'default.cfg', true, true);
+    },
+    onRuntimeInitialized: () => { callMain(args); setTimeout(() => document.getElementById('canvas').focus(), 300); },
+  };
+  const s = document.createElement('script'); s.src = 'websockets-doom.js'; document.body.append(s);
+}
+
+document.getElementById('solo').onclick = () => { mode = 'solo'; launch(['-skill', document.getElementById('skill').value]); };
+document.getElementById('host').onclick = () => {
+  mode = 'host';
+  const m = document.getElementById('mode').value, map = String(Math.max(1, Math.min(32, +document.getElementById('map').value || 1)));
+  hosting = { seg: `${net}.doom.${VPCNet.player}`, name: VPCNet.player, mode: m, map };
+  const extra = ['-server', '-privateserver', '-wss', VPCDoomNet.URL, '-warp', map, '-skill', '3'];
+  if (m !== 'coop') extra.push('-' + m);
+  launch(extra, hosting.seg);
+  status('Сервер создан. Когда все игроки подключатся, нажмите ПРОБЕЛ.');
+};
+function join(h) { mode = 'client'; launch(['-connect', '1', '-wss', VPCDoomNet.URL], h.seg); status('Подключение к ' + h.name + '…'); }
+
+lobby.on((m) => {
+  if (m.t === 'host' && m.seg) { hosts.set(m.seg, Object.assign(m, { seen: Date.now() })); render(); }
+  if (m.t === 'ask' && hosting) lobby.send(Object.assign({ t: 'host' }, hosting));
+});
+const names = { deathmatch: 'дезматч', altdeath: 'дезматч 2.0', coop: 'кооператив' };
+function render() {
+  if (mode) return;
+  const ul = document.getElementById('hosts'), live = [...hosts.values()].filter(h => Date.now() - h.seen < 6000);
+  ul.replaceChildren(...(live.length ? live.map(h => Object.assign(document.createElement('li'), {
+    textContent: `🖥️ ${h.name} — ${names[h.mode] || h.mode}, MAP${String(h.map).padStart(2, '0')}`, onclick: () => join(h) }))
+    : [Object.assign(document.createElement('li'), { textContent: 'пока никого — создайте игру', style: 'color:gray;cursor:default' })]));
+}
+setInterval(() => { if (hosting) lobby.send(Object.assign({ t: 'host' }, hosting)); else if (!mode) { lobby.send({ t: 'ask' }); render(); } }, 2000);
+lobby.send({ t: 'ask' }); render();
+</script>
+</body></html>
