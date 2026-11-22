@@ -5,29 +5,41 @@ import com.google.gson.JsonParser;
 import dev.vintagepc.VintagePC;
 import dev.vintagepc.net.LanPayloads;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * Клиентский мост виртуальной LAN.
  *
- *   JS в MCEF ⇄ ws://127.0.0.1:PORT/lan (LocalHttpServer) ⇄ LanBridge ⇄ пакеты MC ⇄ LanHub на сервере
+ *   JS в MCEF ⇄ ws://127.0.0.1:PORT/lan?pc=KEY (LocalHttpServer) ⇄ LanBridge ⇄ пакеты MC ⇄ LanHub на сервере
+ *
+ * Страница называет каналы локально ("eth:lan", "room:chat-lan"), а мост привязывает их к физической
+ * сети ПК, которую сервер вычислил по кабелям: "room:chat-lan" → "room:1a2b3c4d~chat-lan".
+ * Кабель выдернули — каналы отключаются; воткнули в другой роутер — переподключаются к новой сети.
  *
  * Протокол WebSocket:
- *   текст  JS→Java : {"op":"join","ch":"eth:home"} | {"op":"leave","ch":"..."}
- *   текст  Java→JS : {"op":"hello","player":"Steve","online":true} | {"op":"online","value":bool}
+ *   текст  JS→Java : {"op":"join","ch":"eth:lan"} | {"op":"leave","ch":"..."} | {"op":"shutdown","pc":KEY}
+ *   текст  Java→JS : {"op":"hello",...} | {"op":"online","value":bool} | {"op":"link","up":bool,"label":..,"pcs":n}
  *   бинарь JS→Java : [u8 len][канал UTF-8][данные]
  *   бинарь Java→JS : [u8 len][канал][u8 len][ник отправителя][данные]
- *
- * Несколько компьютеров у одного игрока делят одну подписку на сервере (счётчик ссылок)
- * и видят друг друга локально — как два ПК в одном свитче.
  */
 public final class LanBridge {
-    private static final Set<LocalHttpServer.Conn> conns = ConcurrentHashMap.newKeySet();
+    private static final Pattern LOCAL = Pattern.compile("(eth|room):[A-Za-z0-9_.-]{1,48}");
+
+    private static final class St {
+        final BlockPos pc;
+        volatile String net = "";
+        final Set<String> subs = ConcurrentHashMap.newKeySet();
+        St(BlockPos pc) { this.pc = pc; }
+    }
+
+    private static final Map<LocalHttpServer.Conn, St> conns = new ConcurrentHashMap<>();
     private static final Map<String, Integer> refs = new HashMap<>();
     private static LocalHttpServer server;
     private static String token;
@@ -58,75 +70,109 @@ public final class LanBridge {
         return server.origin() + "/?t=" + token + "&pc=" + pcKey;
     }
 
+    static String full(String net, String local) {
+        int c = local.indexOf(':');
+        return local.substring(0, c + 1) + net + "~" + local.substring(c + 1);
+    }
+
     // ---------- события подключения к серверу MC ----------
 
     static void onLogin() {
         online = true;
-        synchronized (refs) { for (String ch : refs.keySet()) sendToServer(new LanPayloads.Membership(ch, true)); }
         broadcastText("{\"op\":\"online\",\"value\":true,\"player\":" + jsonStr(playerName()) + "}");
     }
 
     static void onLogout() {
-        online = false; // сервер сам забудет подписки; refs сохраняем, чтобы переподписаться
+        online = false;
+        synchronized (refs) { refs.clear(); }  // сервер забыл подписки; восстановятся по NetState
+        for (var e : conns.entrySet()) { e.getValue().net = ""; sendLink(e.getKey(), null); }
         broadcastText("{\"op\":\"online\",\"value\":false}");
+    }
+
+    /** Сервер сообщил, к какой сети подключён ПК (или что кабель выдернут). */
+    static void netChanged(BlockPos pos, PcClient.NetInfo info) {
+        String now = info == null ? "" : info.id();
+        for (var e : conns.entrySet()) {
+            St st = e.getValue();
+            if (!st.pc.equals(pos)) continue;
+            String old = st.net;
+            if (!old.equals(now)) {
+                for (String name : st.subs) if (!old.isEmpty()) ref(full(old, name), -1);
+                st.net = now;
+                for (String name : st.subs) if (!now.isEmpty()) ref(full(now, name), +1);
+            }
+            sendLink(e.getKey(), info);
+        }
+    }
+
+    private static void sendLink(LocalHttpServer.Conn c, PcClient.NetInfo info) {
+        boolean up = info != null && !info.id().isEmpty();
+        c.sendText("{\"op\":\"link\",\"up\":" + up + ",\"label\":" + jsonStr(up ? info.label() : "")
+                + ",\"pcs\":" + (info == null ? 0 : info.pcs()) + "}");
     }
 
     // ---------- входящие от сервера MC ----------
 
     public static void onDeliver(LanPayloads.DeliverS2C p) {
-        byte[] frame = frame(p.channel(), p.sender(), p.data());
-        for (var c : conns) if (subs(c).contains(p.channel())) c.sendBinary(frame);
+        String net = LanPayloads.netOf(p.channel());
+        if (net == null) return;
+        int c = p.channel().indexOf(':'), t = p.channel().indexOf('~');
+        String local = p.channel().substring(0, c + 1) + p.channel().substring(t + 1);
+        byte[] frame = frame(local, p.sender(), p.data());
+        for (var e : conns.entrySet())
+            if (net.equals(e.getValue().net) && e.getValue().subs.contains(local)) e.getKey().sendBinary(frame);
     }
 
     // ---------- WebSocket ----------
 
     private static final class Handler implements LocalHttpServer.WsHandler {
         @Override public void onOpen(LocalHttpServer.Conn c) {
-            if (!c.path.equals("/lan")) { c.close(); return; }
-            c.attrs.put("subs", ConcurrentHashMap.newKeySet());
-            conns.add(c);
+            BlockPos pc = PcClient.fromKey(c.query.getOrDefault("pc", ""));
+            if (!c.path.equals("/lan") || pc == null) { c.close(); return; }
+            St st = new St(pc);
+            PcClient.NetInfo info = PcClient.netInfo(pc);
+            st.net = info == null ? "" : info.id();
+            conns.put(c, st);
             c.sendText("{\"op\":\"hello\",\"player\":" + jsonStr(playerName()) + ",\"online\":" + online + "}");
+            sendLink(c, info);
         }
 
         @Override public void onText(LocalHttpServer.Conn c, String text) {
+            St st = conns.get(c);
+            if (st == null) return;
             JsonObject o;
             try { o = JsonParser.parseString(text).getAsJsonObject(); } catch (Exception e) { return; }
             String op = o.has("op") ? o.get("op").getAsString() : "";
-            String ch = o.has("ch") ? o.get("ch").getAsString() : "";
-            if (op.equals("shutdown") && o.has("pc")) { // «Пуск → Завершение работы»
-                net.minecraft.core.BlockPos pos = PcClient.fromKey(o.get("pc").getAsString());
-                if (pos != null) Minecraft.getInstance().execute(() -> PcClient.shutdown(pos));
+            if (op.equals("shutdown")) { // «Пуск → Завершение работы»
+                Minecraft.getInstance().execute(() -> PcClient.shutdown(st.pc));
                 return;
             }
-            if (!LanPayloads.validChannel(ch)) return;
-            Set<String> subs = subs(c);
-            if (op.equals("join") && subs.size() < 16 && subs.add(ch)) ref(ch, +1);
-            else if (op.equals("leave") && subs.remove(ch)) ref(ch, -1);
+            String ch = o.has("ch") ? o.get("ch").getAsString() : "";
+            if (!LOCAL.matcher(ch).matches()) return;
+            if (op.equals("join") && st.subs.size() < 16 && st.subs.add(ch)) { if (!st.net.isEmpty()) ref(full(st.net, ch), +1); }
+            else if (op.equals("leave") && st.subs.remove(ch)) { if (!st.net.isEmpty()) ref(full(st.net, ch), -1); }
         }
 
         @Override public void onBinary(LocalHttpServer.Conn c, byte[] msg) {
-            if (msg.length < 2) return;
+            St st = conns.get(c);
+            if (st == null || st.net.isEmpty() || msg.length < 2) return; // кабель не подключён — пакет в никуда
             int n = msg[0] & 0xFF;
             if (msg.length < 1 + n) return;
             String ch = new String(msg, 1, n, StandardCharsets.UTF_8);
-            if (!subs(c).contains(ch)) return;
+            if (!st.subs.contains(ch)) return;
             byte[] data = Arrays.copyOfRange(msg, 1 + n, msg.length);
             if (data.length > LanPayloads.MAX_DATA) return;
-            // Локальная доставка другим ПК этого же игрока
+            // Локальная доставка другим ПК этого же игрока в той же сети
             byte[] local = frame(ch, playerName(), data);
-            for (var o : conns) if (o != c && subs(o).contains(ch)) o.sendBinary(local);
-            if (online) sendToServer(new LanPayloads.SendC2S(ch, data));
+            for (var e : conns.entrySet())
+                if (e.getKey() != c && st.net.equals(e.getValue().net) && e.getValue().subs.contains(ch)) e.getKey().sendBinary(local);
+            if (online) sendToServer(new LanPayloads.SendC2S(full(st.net, ch), data));
         }
 
         @Override public void onClose(LocalHttpServer.Conn c) {
-            conns.remove(c);
-            for (String ch : subs(c)) ref(ch, -1);
+            St st = conns.remove(c);
+            if (st != null && !st.net.isEmpty()) for (String ch : st.subs) ref(full(st.net, ch), -1);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Set<String> subs(LocalHttpServer.Conn c) {
-        return (Set<String>) c.attrs.getOrDefault("subs", Set.of());
     }
 
     private static void ref(String ch, int delta) {
@@ -143,7 +189,7 @@ public final class LanBridge {
         mc.execute(() -> { if (mc.getConnection() != null) PacketDistributor.sendToServer(p); });
     }
 
-    private static void broadcastText(String s) { for (var c : conns) c.sendText(s); }
+    private static void broadcastText(String s) { for (var c : conns.keySet()) c.sendText(s); }
 
     private static byte[] frame(String ch, String sender, byte[] data) {
         byte[] a = ch.getBytes(StandardCharsets.UTF_8), b = sender.getBytes(StandardCharsets.UTF_8);

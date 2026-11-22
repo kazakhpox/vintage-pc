@@ -2,8 +2,9 @@
  * VPCNet — сеть Vintage PC. Подключается к моду по ws://<этот же хост>/lan (cookie-токен),
  * поэтому работает в оболочке и в любой игре-картридже, открытой с того же локального сервера.
  *
- * Одна модель для всего: рабочая группа = виртуальный Ethernet-сегмент "eth:<группа>",
- * а сервер Minecraft — обучаемый L2-коммутатор (unicast идёт только адресату, не всем).
+ * Одна модель для всего: каналы — виртуальные сегменты Ethernet и «комнаты», а сервер Minecraft —
+ * обучаемый L2-коммутатор. В какую физическую сеть попадут каналы, решают кабели в мире:
+ * мод привязывает их к сети роутера, к которому подключён этот ПК (VPCNet.link).
  *
  *   VPCNet.room(name)                 — JSON-сообщения всем (чат, лобби, простые JS-игры)
  *   VPCNet.eth(net, onFrame)          — сырые кадры (v86 / NE2000)
@@ -12,17 +13,18 @@
  */
 (function () {
   const enc = new TextEncoder(), dec = new TextDecoder();
-  const subs = new Map(), status = new Set();
-  let ws = null, player = 'offline', online = false;
+  const subs = new Map(), status = new Set(), linkFns = new Set();
+  let ws = null, player = 'offline', online = false, link = { up: false, label: '', pcs: 0 };
   const q = new URLSearchParams(location.search);
 
   function connect() {
-    ws = new WebSocket(`ws://${location.host}/lan`);
+    ws = new WebSocket(`ws://${location.host}/lan?pc=${encodeURIComponent(api.pc)}`);
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => subs.forEach((_, ch) => ws.send(JSON.stringify({ op: 'join', ch })));
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
+        if (m.op === 'link') { link = { up: m.up, label: m.label, pcs: m.pcs }; linkFns.forEach(f => f(link)); return; }
         if (m.player) player = m.player;
         if ('online' in m) online = m.online;
         if ('value' in m) online = m.value;
@@ -58,6 +60,9 @@
     pc: q.get('pc') || 'pc',
     net: q.get('net'),
     onStatus(f) { status.add(f); f({ player, online }); },
+    /** Физическое подключение ПК: { up, label (имя роутера или "crossover"), pcs }. */
+    get link() { return link; },
+    onLink(f) { linkFns.add(f); f(link); return () => linkFns.delete(f); },
 
     join(ch, f) {
       if (!subs.has(ch)) {

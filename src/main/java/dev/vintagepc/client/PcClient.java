@@ -23,6 +23,18 @@ public final class PcClient {
     static final Map<BlockPos, HostInfo> hosting = new HashMap<>();
     static final class HostInfo { String controller = ""; int viewers, nearby; }
 
+    /** Физическая сеть каждого своего ПК (из NetState). */
+    record NetInfo(String id, String label, int pcs) {}
+    private static final Map<BlockPos, NetInfo> nets = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static NetInfo netInfo(BlockPos pos) { return nets.get(pos); }
+
+    public static void onNetState(PcPayloads.NetState p) {
+        NetInfo info = new NetInfo(p.net(), p.label(), p.pcs());
+        nets.put(p.pos(), info);
+        LanBridge.netChanged(p.pos(), info);
+    }
+
     static boolean hasMcef() { return ModList.get().isLoaded("mcef"); }
 
     private static float lastHealth = -1;
@@ -73,6 +85,7 @@ public final class PcClient {
     public static void onClosed(PcPayloads.Closed p) {
         Minecraft mc = Minecraft.getInstance();
         ScreenTextures.release(p.pos());
+        if (nets.remove(p.pos()) != null) LanBridge.netChanged(p.pos(), null);
         if (hosting.remove(p.pos()) != null && hasMcef()) HostSide.close(p.pos());
         if (mc.screen instanceof PcScreenMarker m && m.pos().equals(p.pos())) mc.setScreen(null);
     }
@@ -95,6 +108,7 @@ public final class PcClient {
     /** ПК «выключили» из меню Пуск или браузер вытеснен — освобождаем место за компьютером. */
     static void shutdown(BlockPos pos) {
         ScreenTextures.release(pos);
+        if (nets.remove(pos) != null) LanBridge.netChanged(pos, null);
         if (hosting.remove(pos) == null) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof PcScreenMarker m && m.pos().equals(pos)) mc.setScreen(null);
@@ -103,6 +117,7 @@ public final class PcClient {
     }
 
     static void onLogout() {
+        nets.clear();
         ScreenTextures.releaseAll();
         hosting.clear();
         if (hasMcef()) HostSide.closeAll();

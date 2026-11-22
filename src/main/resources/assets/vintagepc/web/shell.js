@@ -13,9 +13,8 @@
       get(k, d) { try { const v = localStorage.getItem(pcId + ':' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
       set(k, v) { try { localStorage.setItem(pcId + ':' + k, JSON.stringify(v)); } catch {} },
     },
-    /** Имя виртуальной сети (как рабочая группа). Все ПК с одинаковым именем — в одной LAN. */
-    get netName() { return VPC.store.get('net', 'home'); },
-    set netName(v) { VPC.store.set('net', v); },
+    /** Локальное имя сегмента. Какие ПК его видят, определяют кабели и роутер в мире Minecraft. */
+    netName: 'lan',
 
     register(app) { apps.push(app); },
     /** Асинхронные источники ярлыков (картриджи) — ждём их перед отрисовкой рабочего стола. */
@@ -68,6 +67,13 @@
       w.body.append(el('p', { textContent: text }), el('button', { textContent: 'OK', onclick: () => w.close() }));
     },
 
+    /** Всплывающая подсказка у трея, как в Windows XP. */
+    balloon(title, text) {
+      const b = el('div', { className: 'balloon' }, el('b', { textContent: title }), el('div', { textContent: text }));
+      document.body.append(b);
+      setTimeout(() => b.remove(), 5000);
+    },
+
     loadScript(src) {
       return new Promise((ok, fail) => document.head.append(el('script', { src, onload: ok, onerror: () => fail(new Error('Нет файла ' + src)) })));
     },
@@ -101,10 +107,18 @@
       document.addEventListener('mousedown', (e) => { if (!e.target.closest('#startmenu,#startbtn')) $('#startmenu').hidden = true; });
       const tick = () => $('#clock').textContent = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
       tick(); setInterval(tick, 10000);
-      VPCNet.onStatus(({ player, online }) => {
-        $('#netled').classList.toggle('off', !online);
-        $('#netled').title = online ? `Сеть «${VPC.netName}», вы: ${player}` : 'Сеть недоступна';
-      });
+      let wasUp = null;
+      const net = () => {
+        const l = VPCNet.link, ok = VPCNet.online && l.up;
+        $('#netled').textContent = ok ? '🖧' : '🖧❌';
+        $('#netled').classList.toggle('off', !ok);
+        $('#netled').title = !VPCNet.online ? 'Нет связи с сервером' : !l.up ? 'Сетевой кабель не подключён'
+          : `Подключение по локальной сети: ${l.label === 'crossover' ? 'прямой кабель' : l.label} · компьютеров: ${l.pcs}`;
+        if (wasUp !== null && wasUp !== ok) VPC.balloon(ok ? 'Подключение по локальной сети' : 'Сетевой кабель не подключён',
+          ok ? `Сеть: ${l.label === 'crossover' ? 'прямой кабель' : l.label}` : 'Проверьте кабель и роутер.');
+        wasUp = ok;
+      };
+      VPCNet.onStatus(net); VPCNet.onLink(net);
     },
   };
   window.VPC = VPC;

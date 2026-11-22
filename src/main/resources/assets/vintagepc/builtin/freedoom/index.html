@@ -27,7 +27,7 @@
  * лобби в комнате doom-<группа>, сама партия — в Ethernet-сегменте <группа>.doom.<хост>.
  */
 const q = new URLSearchParams(location.search), net = q.get('net') || 'home';
-document.getElementById('net').textContent = net;
+VPCNet.onLink((l) => document.getElementById('net').textContent = !l.up ? 'кабель не подключён' : l.label === 'crossover' ? 'прямой кабель' : l.label);
 const lobby = VPCNet.room('doom-' + net), hosts = new Map();
 let mode = null, hosting = null;
 const status = (t) => document.getElementById('status').textContent = t || '';

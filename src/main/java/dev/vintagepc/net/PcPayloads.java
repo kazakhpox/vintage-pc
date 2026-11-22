@@ -31,6 +31,18 @@ public final class PcPayloads {
         @Override public Type<Closed> type() { return TYPE; }
     }
 
+    /**
+     * Сервер → хост: к какой сети физически подключён ПК (обход кабелей). net = "" — кабель не подключён
+     * или сеть неисправна; label — имя роутера / "crossover"; pcs — сколько компьютеров в сегменте.
+     */
+    public record NetState(BlockPos pos, String net, String label, int pcs) implements CustomPacketPayload {
+        public static final Type<NetState> TYPE = new Type<>(VintagePC.id("pc_net"));
+        public static final StreamCodec<FriendlyByteBuf, NetState> CODEC = StreamCodec.of(
+                (b, p) -> { b.writeBlockPos(p.pos); b.writeUtf(p.net, 8); b.writeUtf(p.label, 40); b.writeVarInt(p.pcs); },
+                b -> new NetState(b.readBlockPos(), b.readUtf(8), b.readUtf(40), b.readVarInt()));
+        @Override public Type<NetState> type() { return TYPE; }
+    }
+
     /** Клиент → сервер: хост выключил ПК (или у него нет MCEF) / зритель отошёл от экрана. */
     public record Leave(BlockPos pos) implements CustomPacketPayload {
         public static final Type<Leave> TYPE = new Type<>(VintagePC.id("pc_leave"));

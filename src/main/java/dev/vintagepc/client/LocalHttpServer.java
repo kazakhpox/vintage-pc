@@ -64,9 +64,10 @@ final class LocalHttpServer {
         private final OutputStream out;
         final Map<String, Object> attrs = new HashMap<>();
         final String path;
+        final Map<String, String> query;
         volatile boolean open = true;
 
-        Conn(Socket s, OutputStream out, String path) { socket = s; this.out = out; this.path = path; }
+        Conn(Socket s, OutputStream out, String path, Map<String, String> query) { socket = s; this.out = out; this.path = path; this.query = query; }
 
         void sendText(String s) { send(0x1, s.getBytes(StandardCharsets.UTF_8)); }
         void sendBinary(byte[] b) { send(0x2, b); }
@@ -147,7 +148,7 @@ final class LocalHttpServer {
                     write(out, Response.text(403, "forbidden"), method, h, false);
                     return;
                 }
-                if ("websocket".equalsIgnoreCase(h.get("upgrade"))) { websocket(s, in, out, h, path); return; }
+                if ("websocket".equalsIgnoreCase(h.get("upgrade"))) { websocket(s, in, out, h, path, query); return; }
                 if (!method.equals("GET") && !method.equals("HEAD")) { write(out, Response.text(405, "method"), method, h, false); return; }
 
                 Response r;
@@ -209,12 +210,12 @@ final class LocalHttpServer {
         return keep;
     }
 
-    private void websocket(Socket s, InputStream rawIn, OutputStream out, Map<String, String> h, String path) throws Exception {
+    private void websocket(Socket s, InputStream rawIn, OutputStream out, Map<String, String> h, String path, Map<String, String> query) throws Exception {
         String key = h.get("sec-websocket-key");
         if (key == null) return;
         String accept = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1")
                 .digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)));
-        Conn c = new Conn(s, out, path);
+        Conn c = new Conn(s, out, path, query);
         synchronized (c) {
             out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                     + "Sec-WebSocket-Accept: " + accept + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));

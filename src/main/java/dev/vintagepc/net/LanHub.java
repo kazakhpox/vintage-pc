@@ -40,6 +40,8 @@ public final class LanHub {
         if (!LanPayloads.validChannel(p.channel()) || !(ctx.player() instanceof ServerPlayer sp)) return;
         UUID id = sp.getUUID();
         if (p.join()) {
+            // В сеть пускаем, только если у игрока есть включённый ПК, физически подключённый к ней кабелем
+            if (!PcSessions.hostsNet(id, LanPayloads.netOf(p.channel()))) return;
             long count = members.values().stream().filter(s -> s.contains(id)).count();
             if (count >= MAX_CHANNELS_PER_PLAYER) return;
             members.computeIfAbsent(p.channel(), k -> new HashSet<>()).add(id);
@@ -54,6 +56,13 @@ public final class LanHub {
         if (b[0] >= MAX_PACKETS_PER_TICK || b[1] + p.data().length > MAX_BYTES_PER_TICK) return; // перегруженный хаб
         b[0]++; b[1] += p.data().length;
         route(from, p.channel(), p.data());
+    }
+
+    /** Кабель выдернули / сеть сменилась: игрок покидает все каналы этой сети. */
+    static void dropNet(UUID player, String net) {
+        if (net == null || net.isEmpty()) return;
+        for (String ch : new ArrayList<>(members.keySet()))
+            if (net.equals(LanPayloads.netOf(ch)) && members.get(ch).contains(player)) leave(ch, player);
     }
 
     private static void leaveAll(UUID id) {
@@ -74,6 +83,7 @@ public final class LanHub {
     private static void route(ServerPlayer from, String channel, byte[] data) {
         Set<UUID> set = members.get(channel);
         if (set == null || !set.contains(from.getUUID())) return;
+        PcSessions.activity(LanPayloads.netOf(channel));
         var players = from.server.getPlayerList();
         var out = new LanPayloads.DeliverS2C(channel, from.getGameProfile().getName(), data);
 

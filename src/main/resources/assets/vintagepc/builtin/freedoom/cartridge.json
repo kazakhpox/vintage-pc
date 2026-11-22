@@ -5,5 +5,5 @@
   "html": { "entry": "index.html" },
   "net": { "mode": "custom" },
   "width": 680, "height": 520,
-  "builtin": 1
+  "builtin": 2
 }

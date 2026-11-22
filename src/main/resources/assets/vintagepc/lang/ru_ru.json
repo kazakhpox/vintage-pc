@@ -7,5 +7,8 @@
   "vintagepc.host_locked": "Управляет %s · F8 — забрать управление",
   "vintagepc.viewer_wait": "Ждём изображение с ПК %s...",
   "vintagepc.viewer_watch": "ПК игрока %s · управляет: %s · F8 — взять управление · Shift+Esc — выйти",
-  "vintagepc.viewer_control": "Вы управляете ПК игрока %s · F8 — отдать · Shift+Esc — выйти"
+  "vintagepc.viewer_control": "Вы управляете ПК игрока %s · F8 — отдать · Shift+Esc — выйти",
+  "block.vintagepc.network_cable": "Сетевой кабель",
+  "block.vintagepc.router": "Роутер",
+  "vintagepc.router_info": "Сеть «%s»: компьютеров — %s, роутеров — %s"
 }

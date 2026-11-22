@@ -34,6 +34,7 @@ public final class PcSessions {
         /** Игроки рядом, которые видят монитор в мире (получают кадры с пониженной частотой). */
         final Set<UUID> ambient = new HashSet<>();
         int frameBudget, inputBudget;
+        NetTopology.Network net = new NetTopology.Network("", "", List.of(), List.of());
     }
 
     private static final Map<GlobalPos, Session> sessions = new HashMap<>();
@@ -42,7 +43,8 @@ public final class PcSessions {
     public static void init(IEventBus bus) {
         bus.addListener((ServerTickEvent.Post e) -> {
             for (Session s : sessions.values()) { s.frameBudget = 0; s.inputBudget = 0; }
-            if (++tick % 20 == 0) checkRange(e.getServer());
+            if (++tick % 20 == 0) { checkRange(e.getServer()); refreshNetworks(e.getServer()); }
+            blinkRouters(e.getServer());
         });
         bus.addListener((PlayerEvent.PlayerLoggedOutEvent e) -> {
             if (e.getEntity() instanceof ServerPlayer p) leaveAll(p);
@@ -67,6 +69,7 @@ public final class PcSessions {
                 sessions.put(key, s);
             }
             send(p, new PcPayloads.Open(pos, true, s.hostName));
+            updateNet(p.server, key, s, true);
         } else {
             s.viewers.add(p.getUUID());
             send(p, new PcPayloads.Open(pos, false, s.hostName));
@@ -129,6 +132,60 @@ public final class PcSessions {
         if (host != null) send(host, p);
     }
 
+    // ---------- физическая сеть ----------
+
+    /** Есть ли у игрока включённый ПК, подключённый кабелем к сети net. */
+    static boolean hostsNet(UUID player, String net) {
+        if (net == null) return false;
+        for (Session s : sessions.values()) if (s.host.equals(player) && net.equals(s.net.id())) return true;
+        return false;
+    }
+
+    private static void refreshNetworks(net.minecraft.server.MinecraftServer server) {
+        for (var e : sessions.entrySet()) updateNet(server, e.getKey(), e.getValue(), false);
+    }
+
+    private static void updateNet(net.minecraft.server.MinecraftServer server, GlobalPos key, Session s, boolean force) {
+        var level = server.getLevel(key.dimension());
+        if (level == null) return;
+        NetTopology.Network n = NetTopology.explore(level, key.pos());
+        boolean changed = !n.id().equals(s.net.id()) || !n.label().equals(s.net.label()) || n.pcs().size() != s.net.pcs().size();
+        if (!changed && !force) { s.net = n; return; }
+        String old = s.net.id();
+        s.net = n;
+        if (!old.equals(n.id()) && !hostsNet(s.host, old)) LanHub.dropNet(s.host, old);
+        ServerPlayer host = server.getPlayerList().getPlayer(s.host);
+        if (host != null) send(host, new PcPayloads.NetState(key.pos(), n.id(), n.label(), n.pcs().size()));
+    }
+
+    /** Время последнего пакета через роутер — для мигания светодиодов. */
+    private static final Map<GlobalPos, Integer> routerActivity = new HashMap<>();
+
+    static void activity(String net) {
+        if (net == null) return;
+        for (var e : sessions.entrySet()) {
+            if (!net.equals(e.getValue().net.id())) continue;
+            for (BlockPos r : e.getValue().net.routers()) routerActivity.put(GlobalPos.of(e.getKey().dimension(), r), tick);
+            return;
+        }
+    }
+
+    private static void blinkRouters(net.minecraft.server.MinecraftServer server) {
+        for (var it = routerActivity.entrySet().iterator(); it.hasNext(); ) {
+            var e = it.next();
+            var level = server.getLevel(e.getKey().dimension());
+            BlockPos pos = e.getKey().pos();
+            if (level == null || !level.isLoaded(pos)) { it.remove(); continue; }
+            var state = level.getBlockState(pos);
+            if (!(state.getBlock() instanceof dev.vintagepc.block.RouterBlock)) { it.remove(); continue; }
+            boolean recent = tick - e.getValue() < 10;
+            boolean on = recent && (tick / 2) % 2 == 0;                // мигание, пока идёт трафик
+            if (state.getValue(dev.vintagepc.block.RouterBlock.ACTIVE) != on)
+                level.setBlock(pos, state.setValue(dev.vintagepc.block.RouterBlock.ACTIVE, on), net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+            if (!recent) it.remove();
+        }
+    }
+
     // ---------- служебное ----------
 
     private static void leaveAll(ServerPlayer p) {
@@ -137,6 +194,7 @@ public final class PcSessions {
             Session s = e.getValue();
             s.ambient.remove(p.getUUID());
             if (s.host.equals(p.getUUID())) {
+                LanHub.dropNet(s.host, s.net.id());
                 for (UUID v : participants(s)) {
                     ServerPlayer vp = p.server.getPlayerList().getPlayer(v);
                     if (vp != null) send(vp, new PcPayloads.Closed(e.getKey().pos()));
@@ -180,6 +238,7 @@ public final class PcSessions {
 
     private static void end(net.minecraft.server.MinecraftServer server, GlobalPos key, Session s) {
         sessions.remove(key);
+        if (!hostsNet(s.host, s.net.id())) LanHub.dropNet(s.host, s.net.id());
         for (UUID id : participants(s)) {
             ServerPlayer p = server.getPlayerList().getPlayer(id);
             if (p != null) send(p, new PcPayloads.Closed(key.pos()));

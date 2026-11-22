@@ -7,5 +7,8 @@
   "vintagepc.host_locked": "%s is controlling · F8 — take control back",
   "vintagepc.viewer_wait": "Waiting for %s's screen...",
   "vintagepc.viewer_watch": "Watching %s's PC · controlling: %s · F8 — take control · Shift+Esc — leave",
-  "vintagepc.viewer_control": "You control %s's PC · F8 — give back · Shift+Esc — leave"
+  "vintagepc.viewer_control": "You control %s's PC · F8 — give back · Shift+Esc — leave",
+  "block.vintagepc.network_cable": "Network Cable",
+  "block.vintagepc.router": "Router",
+  "vintagepc.router_info": "Network «%s»: %s PC(s), %s router(s)"
 }

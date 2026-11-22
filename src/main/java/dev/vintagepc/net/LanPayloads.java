@@ -10,8 +10,9 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
  * Пакеты виртуальной LAN поверх соединения Minecraft.
- * Канал — "eth:&lt;сеть&gt;" (сырые Ethernet-кадры, обучаемый L2-свитч)
- * или "room:&lt;имя&gt;" (широковещательные сообщения для JS-игр, чата, лобби).
+ * Канал — "eth:&lt;net&gt;~&lt;имя&gt;" (сырые Ethernet-кадры, обучаемый L2-свитч)
+ * или "room:&lt;net&gt;~&lt;имя&gt;" (широковещательные сообщения), где net — 8 hex-символов
+ * физической сети (роутер/кроссовер), которую сервер вычислил по кабелям.
  */
 public final class LanPayloads {
     public static final int MAX_CHANNEL = 64;
@@ -44,8 +45,17 @@ public final class LanPayloads {
         @Override public Type<DeliverS2C> type() { return TYPE; }
     }
 
+    private static final java.util.regex.Pattern CHANNEL = java.util.regex.Pattern.compile("(eth|room):([0-9a-f]{8})~[A-Za-z0-9_.-]{1,48}");
+
     public static boolean validChannel(String ch) {
-        return ch != null && ch.length() <= MAX_CHANNEL && ch.matches("(eth|room):[A-Za-z0-9_.-]{1,48}");
+        return ch != null && ch.length() <= MAX_CHANNEL && CHANNEL.matcher(ch).matches();
+    }
+
+    /** Имя сети из канала ("eth:1a2b3c4d~x" → "1a2b3c4d") или null. */
+    public static String netOf(String ch) {
+        if (!validChannel(ch)) return null;
+        int c = ch.indexOf(':');
+        return ch.substring(c + 1, c + 9);
     }
 
     public static void register(RegisterPayloadHandlersEvent e) {
@@ -65,6 +75,7 @@ public final class LanPayloads {
                 (p, ctx) -> dev.vintagepc.client.PcClient.onInput(p), PcSessions::onInput));
         r.playToClient(PcPayloads.Open.TYPE, PcPayloads.Open.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onOpen(p));
         r.playToClient(PcPayloads.Closed.TYPE, PcPayloads.Closed.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onClosed(p));
+        r.playToClient(PcPayloads.NetState.TYPE, PcPayloads.NetState.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onNetState(p));
         r.playToClient(PcPayloads.State.TYPE, PcPayloads.State.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onState(p));
 
     }
