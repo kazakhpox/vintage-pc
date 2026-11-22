@@ -106,11 +106,26 @@ final class LocalHttpServer {
         this.token = token;
         this.router = router;
         this.ws = ws;
-        this.server = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+        // Явно IPv4 127.0.0.1: getLoopbackAddress() при -Djava.net.preferIPv6Addresses=true (бывает у лаунчеров
+        // на Windows) отдаёт ::1, и Chromium, стучащийся на 127.0.0.1, получал ERR_CONNECTION_REFUSED.
+        this.server = new ServerSocket();
+        this.server.setReuseAddress(false);
+        this.server.bind(new java.net.InetSocketAddress(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), 0), 50);
         pool.execute(this::acceptLoop);
+        selfTest();
     }
 
     int port() { return server.getLocalPort(); }
+
+    /** Подключиться к себе как браузер — если не выходит, локальные соединения режет что-то снаружи (фаервол/антивирус). */
+    private void selfTest() {
+        try (Socket s = new Socket()) {
+            s.connect(new java.net.InetSocketAddress("127.0.0.1", port()), 2000);
+            LOG.info("listening on {} — self-test OK", server.getLocalSocketAddress());
+        } catch (IOException e) {
+            LOG.error("listening on {} — self-test FAILED: {}. Something blocks local connections (firewall/antivirus?)", server.getLocalSocketAddress(), e.toString());
+        }
+    }
     String origin() { return "http://127.0.0.1:" + port(); }
 
     private void acceptLoop() {
@@ -119,8 +134,8 @@ final class LocalHttpServer {
                 Socket s = server.accept();
                 s.setTcpNoDelay(true);
                 pool.execute(() -> serve(s));
-            } catch (IOException e) {
-                if (!server.isClosed()) LOG.warn("accept failed", e);
+            } catch (Throwable e) {
+                if (!server.isClosed()) LOG.error("accept failed", e);
             }
         }
     }

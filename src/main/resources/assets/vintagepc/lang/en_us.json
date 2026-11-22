@@ -37,5 +37,6 @@
   "vintagepc.screen_blocked": "Something is blocking the monitor — clear the space in front of the screen",
   "vintagepc.white_screen": "The PC shell did not load (white screen). Check: 1) MCEF is installed and finished downloading Chromium (\"Chromium Embedded Framework initialized\" in the log); 2) update your GPU driver; 3) send the \"Vintage PC\" lines from logs/latest.log.",
   "itemGroup.vintagepc": "Vintage PC",
-  "vintagepc.load_error": "The PC shell failed to load: %s. Details are in logs/latest.log (\"Vintage PC\" lines)."
+  "vintagepc.load_error": "The PC shell failed to load: %s. Details are in logs/latest.log (\"Vintage PC\" lines).",
+  "vintagepc.load_refused": "Chromium could not connect to the mod's local server (%s). If logs/latest.log shows \"self-test OK\", an antivirus or firewall blocks 127.0.0.1: add javaw.exe and jcef_helper.exe (mods/mcef-libraries) to its exceptions."
 }

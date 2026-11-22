@@ -55,7 +55,9 @@ final class HostSide {
                     VintagePC.LOG.error("Vintage PC page failed: {} -> {} {}", strip(url), code, text);
                     Minecraft.getInstance().execute(() -> {
                         var p = Minecraft.getInstance().player;
-                        if (p != null) p.displayClientMessage(net.minecraft.network.chat.Component.translatable("vintagepc.load_error", String.valueOf(code)), false);
+                        if (p != null) p.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                                String.valueOf(code).contains("REFUSED") || String.valueOf(code).contains("RESET") ? "vintagepc.load_refused" : "vintagepc.load_error",
+                                String.valueOf(code)), false);
                     });
                 }
             });
