@@ -50,8 +50,14 @@ final class BrowserPool {
     static void resetCursor() {
         var mc = net.minecraft.client.Minecraft.getInstance();
         mc.execute(() -> {
-            org.lwjgl.glfw.GLFW.glfwSetCursor(mc.getWindow().getWindow(), 0L);
-            if (mc.screen == null) mc.mouseHandler.grabMouse();
+            long win = mc.getWindow().getWindow();
+            org.lwjgl.glfw.GLFW.glfwSetCursor(win, 0L);
+            if (mc.screen != null) return;
+            // MCEF меняет режим курсора в обход Minecraft, а grabMouse() ничего не делает, если игра
+            // уже считает мышь захваченной, — поэтому выставляем режим напрямую
+            if (mc.mouseHandler.isMouseGrabbed())
+                org.lwjgl.glfw.GLFW.glfwSetInputMode(win, org.lwjgl.glfw.GLFW.GLFW_CURSOR, org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED);
+            else mc.mouseHandler.grabMouse();
         });
     }
 

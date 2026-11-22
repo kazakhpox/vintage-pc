@@ -69,6 +69,7 @@ final class PcScreen extends Screen implements PcScreenMarker {
             return;
         }
         if (!PcCamera.settled()) return;
+        if (!closing) CursorConfine.capture();
         int viewers = PcClient.viewersOf(pos);
         String ctrl = PcClient.controllerOf(pos);
         Component c = !ctrl.isEmpty() ? Component.translatable("vintagepc.host_locked", ctrl)
@@ -103,11 +104,15 @@ final class PcScreen extends Screen implements PcScreenMarker {
         return true;
     }
 
-    @Override public void mouseMoved(double x, double y) { if (!locked()) browser.sendMouseMove(bx(x), by(y)); }
+    @Override public void mouseMoved(double x, double y) {
+        if (locked()) return;
+        double[] c = CursorConfine.clamp(x, y, rect());           // курсор не выходит за экран монитора
+        browser.sendMouseMove(bx(c[0]), by(c[1]));
+    }
 
     @Override
     public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
-        if (!locked()) browser.sendMouseMove(bx(x), by(y));
+        if (!locked()) { double[] c = CursorConfine.clamp(x, y, rect()); browser.sendMouseMove(bx(c[0]), by(c[1])); }
         return true;
     }
 

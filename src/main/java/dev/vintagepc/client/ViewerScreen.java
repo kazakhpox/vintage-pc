@@ -41,6 +41,7 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         if (!PcCamera.settled()) return;
+        if (inControl() && !closing) CursorConfine.capture();
         Component status = ScreenTextures.get(pos) == null ? Component.translatable("vintagepc.viewer_wait", hostName)
                 : inControl() ? Component.translatable("vintagepc.viewer_control", hostName)
                 : Component.translatable("vintagepc.viewer_watch", hostName, controller.isEmpty() ? hostName : controller);
@@ -76,6 +77,7 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
 
     @Override
     public void mouseMoved(double x, double y) {
+        if (inControl() && PcCamera.settled()) { double[] c = CursorConfine.clamp(x, y, PcCamera.screenRect(width, height)); x = c[0]; y = c[1]; }
         long now = System.currentTimeMillis();
         if (now - lastMove < 33) return; // не чаще 30 раз в секунду
         lastMove = now;
@@ -96,6 +98,7 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
     @Override
     public void removed() {
         PcCamera.cancel();
+        BrowserPool.resetCursor();
         PcClient.send(new PcPayloads.Leave(pos));
     }
 }

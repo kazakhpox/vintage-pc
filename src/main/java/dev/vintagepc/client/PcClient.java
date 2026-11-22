@@ -140,6 +140,7 @@ public final class PcClient {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof PcScreenMarker m && m.pos().equals(pos)) mc.setScreen(null);
         if (hasMcef()) HostSide.close(pos);
+        if (hasMcef()) BrowserPool.resetCursor();            // MCEF при закрытии браузера дёргает курсор — вернуть захват игрой
         send(new PcPayloads.Leave(pos));
     }
 
