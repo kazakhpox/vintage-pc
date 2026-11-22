@@ -14,7 +14,6 @@ import org.lwjgl.glfw.GLFW;
  * тогда мышь и клавиатура уходят на ПК хоста. MCEF зрителю не нужен.
  */
 final class ViewerScreen extends Screen implements PcScreenMarker {
-    private static final int M = PcScreen.MARGIN;
 
     private final BlockPos pos;
     private final String hostName;
@@ -37,27 +36,33 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        g.fill(0, 0, width, height, 0xFF2B2A26);
-        g.fill(M - 2, M - 2, width - M + 2, height - M + 2, 0xFF000000);
-        ResourceLocation tex = ScreenTextures.get(pos);
-        int[] sz = ScreenTextures.size(pos);
-        if (tex != null && sz != null) g.blit(tex, M, M, width - 2 * M, height - 2 * M, 0, 0, sz[0], sz[1], sz[0], sz[1]);
-        else g.drawCenteredString(font, Component.translatable("vintagepc.viewer_wait", hostName), width / 2, height / 2, 0xFFFFFF);
+    protected void init() { if (!closing) PcCamera.enter(pos); }
 
-        Component status = inControl()
-                ? Component.translatable("vintagepc.viewer_control", hostName)
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        if (!PcCamera.settled()) return;
+        Component status = ScreenTextures.get(pos) == null ? Component.translatable("vintagepc.viewer_wait", hostName)
+                : inControl() ? Component.translatable("vintagepc.viewer_control", hostName)
                 : Component.translatable("vintagepc.viewer_watch", hostName, controller.isEmpty() ? hostName : controller);
-        int w = font.width(status) + 8;
-        g.fill(M, 0, M + w, M + 2, 0xC0000000);
-        g.drawString(font, status, M + 4, 0, inControl() ? 0x80FF80 : 0xFFFFFF);
+        int w = font.width(status) + 10;
+        g.fill((width - w) / 2, height - 14, (width + w) / 2, height - 2, 0x90000000);
+        g.drawCenteredString(font, status, width / 2, height - 12, inControl() ? 0x80FF80 : 0xFFFFFF);
     }
 
-    private float nx(double x) { return (float) Math.max(0, Math.min(1, (x - M) / (width - 2.0 * M))); }
-    private float ny(double y) { return (float) Math.max(0, Math.min(1, (y - M) / (height - 2.0 * M))); }
+    private boolean closing;
+
+    @Override
+    public void onClose() {
+        if (closing) return;
+        closing = true;
+        PcCamera.exit(() -> minecraft.setScreen(null));
+    }
+
+    private float nx(double x) { double[] r = PcCamera.screenRect(width, height); return (float) Math.max(0, Math.min(1, (x - r[0]) / r[2])); }
+    private float ny(double y) { double[] r = PcCamera.screenRect(width, height); return (float) Math.max(0, Math.min(1, (y - r[1]) / r[3])); }
 
     private void input(int kind, int a, int b, int c, double x, double y) {
-        if (inControl()) PcClient.send(new PcPayloads.Input(pos, kind, a, b, c, nx(x), ny(y)));
+        if (inControl() && PcCamera.settled() && !closing) PcClient.send(new PcPayloads.Input(pos, kind, a, b, c, nx(x), ny(y)));
     }
 
     @Override public void renderBackground(GuiGraphics g, int mx, int my, float pt) {}
@@ -90,6 +95,7 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
 
     @Override
     public void removed() {
+        PcCamera.cancel();
         PcClient.send(new PcPayloads.Leave(pos));
     }
 }

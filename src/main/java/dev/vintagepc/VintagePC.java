@@ -11,6 +11,8 @@ import dev.vintagepc.block.WifiTowerPartBlock;
 import dev.vintagepc.item.PcPart;
 import dev.vintagepc.item.PcPartItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.sounds.SoundEvent;
+import net.neoforged.neoforge.registries.DeferredHolder;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -64,6 +66,10 @@ public final class VintagePC {
             BlockBehaviour.Properties.of().strength(2f).sound(SoundType.METAL).noOcclusion().lightLevel(s -> 7));
     public static final DeferredItem<BlockItem> WIFI_ANTENNA_ITEM = ITEMS.registerSimpleBlockItem(WIFI_ANTENNA);
 
+    private static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
+    /** Включение ПК: писк POST, вентилятор, щелчки диска и стартовый аккорд (синтезирован для мода). */
+    public static final DeferredHolder<SoundEvent, SoundEvent> PC_BOOT = SOUNDS.register("pc_boot", () -> SoundEvent.createVariableRangeEvent(id("pc_boot")));
+
     /** Комплектующие ПК. */
     public static final java.util.Map<PcPart, DeferredItem<PcPartItem>> PART_ITEMS = new java.util.EnumMap<>(PcPart.class);
     static {
@@ -90,6 +96,7 @@ public final class VintagePC {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
+        SOUNDS.register(modBus);
         modBus.addListener(LanPayloads::register);
         modBus.addListener((BuildCreativeModeTabContentsEvent e) -> {
             if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {

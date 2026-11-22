@@ -1,26 +1,24 @@
 package dev.vintagepc.client;
 
 import com.cinemamod.mcef.MCEFBrowser;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.*;
 import dev.vintagepc.net.PcPayloads;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Монитор хоста. Весь ввод уходит в Chromium; Shift+Esc — выйти (обычный Esc нужен играм),
- * F8 — забрать управление у зрителя. Пока управляет другой игрок, локальный ввод игнорируется.
+ * Хост за компьютером. Интерфейс ПК рисуется на мониторе в мире ({@link MonitorRenderer}),
+ * камера подлетает к экрану ({@link PcCamera}); этот экран лишь ловит ввод и показывает подсказки.
+ * Shift+Esc — встать из-за компьютера, F8 — забрать управление у зрителя.
  */
 final class PcScreen extends Screen implements PcScreenMarker {
-    static final int MARGIN = 8;
     private final BlockPos pos;
     private final String url;
     private MCEFBrowser browser;
+    private boolean closing;
 
     PcScreen(BlockPos pos, String url) {
         super(Component.translatable("block.vintagepc.retro_pc"));
@@ -32,6 +30,7 @@ final class PcScreen extends Screen implements PcScreenMarker {
 
     @Override
     protected void init() {
+        if (!closing) PcCamera.enter(pos);
         if (!BrowserPool.ready()) return;
         if (browser == null) browser = BrowserPool.get(pos, url);
         resizeBrowser();
@@ -45,57 +44,49 @@ final class PcScreen extends Screen implements PcScreenMarker {
     }
 
     private double scale() { return minecraft.getWindow().getGuiScale(); }
+    private double[] rect() { return PcCamera.screenRect(width, height); }
 
+    /** Браузер — ровно 4:3, в разрешении, которое экран монитора занимает в окне (резко, без растяжения). */
     private void resizeBrowser() {
         if (browser == null) return;
-        int w = (int) ((width - 2 * MARGIN) * scale()), h = (int) ((height - 2 * MARGIN) * scale());
-        if (w > 100 && h > 100) BrowserPool.resize(pos, browser, w, h);
+        double[] r = rect();
+        int w = (int) Math.round(r[2] * scale()), h = (int) Math.round(r[3] * scale());
+        if (w > 100 && h > 75) BrowserPool.resize(pos, browser, w, h);
     }
 
-    private int bx(double x) { return (int) ((x - MARGIN) * scale()); }
-    private int by(double y) { return (int) ((y - MARGIN) * scale()); }
-    private boolean locked() { return browser == null || !PcClient.controllerOf(pos).isEmpty(); }
+    private int bx(double x) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null ? 0 : (int) ((x - r[0]) / r[2] * s[0]); }
+    private int by(double y) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null ? 0 : (int) ((y - r[1]) / r[3] * s[1]); }
+    private boolean locked() { return browser == null || closing || !PcCamera.settled() || !PcClient.controllerOf(pos).isEmpty(); }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        g.fill(0, 0, width, height, 0xFF2B2A26);
-        g.fill(MARGIN - 2, MARGIN - 2, width - MARGIN + 2, height - MARGIN + 2, 0xFF000000);
         if (browser == null) {
-            g.drawCenteredString(font, Component.translatable("vintagepc.booting"), width / 2, height / 2, 0xFFFFFF);
+            g.drawCenteredString(font, Component.translatable("vintagepc.booting"), width / 2, height - 20, 0xFFFFFF);
             if (BrowserPool.ready()) init();
             return;
         }
-        drawTexture(browser.getRenderer().getTextureID(), MARGIN, MARGIN, width - MARGIN, height - MARGIN);
-
+        if (!PcCamera.settled()) return;
         int viewers = PcClient.viewersOf(pos);
         String ctrl = PcClient.controllerOf(pos);
-        if (viewers > 0 || !ctrl.isEmpty()) {
-            Component c = ctrl.isEmpty()
-                    ? Component.translatable("vintagepc.host_status", viewers)
-                    : Component.translatable("vintagepc.host_locked", ctrl);
-            int w = font.width(c) + 8;
-            g.fill(width - MARGIN - w, 0, width - MARGIN, MARGIN + 2, 0xC0000000);
-            g.drawString(font, c, width - MARGIN - w + 4, 0, ctrl.isEmpty() ? 0x80FF80 : 0xFFD040);
-        }
-    }
-
-    static void drawTexture(int tex, int x0, int y0, int x1, int y1) {
-        RenderSystem.disableDepthTest();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, tex);
-        BufferBuilder buf = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        buf.addVertex(x0, y1, 0).setUv(0, 1).setColor(255, 255, 255, 255);
-        buf.addVertex(x1, y1, 0).setUv(1, 1).setColor(255, 255, 255, 255);
-        buf.addVertex(x1, y0, 0).setUv(1, 0).setColor(255, 255, 255, 255);
-        buf.addVertex(x0, y0, 0).setUv(0, 0).setColor(255, 255, 255, 255);
-        BufferUploader.drawWithShader(buf.buildOrThrow());
-        RenderSystem.setShaderTexture(0, 0);
-        RenderSystem.enableDepthTest();
+        Component c = !ctrl.isEmpty() ? Component.translatable("vintagepc.host_locked", ctrl)
+                : viewers > 0 ? Component.translatable("vintagepc.host_status", viewers)
+                : Component.translatable("vintagepc.host_hint");
+        int w = font.width(c) + 10;
+        g.fill((width - w) / 2, height - 14, (width + w) / 2, height - 2, 0x90000000);
+        g.drawCenteredString(font, c, width / 2, height - 12, ctrl.isEmpty() ? 0xC0FFC0 : 0xFFD040);
     }
 
     @Override public void renderBackground(GuiGraphics g, int mx, int my, float pt) {}
     @Override public boolean isPauseScreen() { return false; }
     @Override public boolean shouldCloseOnEsc() { return false; }
+
+    @Override
+    public void onClose() {
+        if (closing) return;
+        closing = true;
+        if (browser != null) browser.setFocus(false);
+        PcCamera.exit(() -> minecraft.setScreen(null));
+    }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
@@ -109,10 +100,7 @@ final class PcScreen extends Screen implements PcScreenMarker {
         return true;
     }
 
-    @Override
-    public void mouseMoved(double x, double y) {
-        if (!locked()) browser.sendMouseMove(bx(x), by(y));
-    }
+    @Override public void mouseMoved(double x, double y) { if (!locked()) browser.sendMouseMove(bx(x), by(y)); }
 
     @Override
     public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
@@ -149,5 +137,6 @@ final class PcScreen extends Screen implements PcScreenMarker {
     @Override
     public void removed() {
         if (browser != null) browser.setFocus(false); // браузер не закрываем — ПК остаётся включённым
+        PcCamera.cancel();                              // закрыли не через Shift+Esc (урон и т.п.) — сразу вернуть камеру
     }
 }

@@ -31,5 +31,7 @@
   "vintagepc.case_empty": "The case is empty",
   "vintagepc.tower_ok": "Wi-Fi tower “%s” is online",
   "vintagepc.tower_unnamed": "unnamed",
-  "vintagepc.tower_incomplete": "Tower incomplete: needs %s+ mast sections above the base and an antenna on top"
+  "vintagepc.tower_incomplete": "Tower incomplete: needs %s+ mast sections above the base and an antenna on top",
+  "subtitles.vintagepc.pc_boot": "Computer boots up",
+  "vintagepc.host_hint": "Shift+Esc — step away from the PC"
 }

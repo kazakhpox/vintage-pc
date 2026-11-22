@@ -67,6 +67,7 @@ public final class PcSessions {
         if (s == null || s.host.equals(p.getUUID()) || hostGone) {
             if (s != null && !s.host.equals(p.getUUID())) end(p.server, key, s); // старый хост ушёл — ПК переходит новому
             if (s == null || !s.host.equals(p.getUUID())) {
+                p.level().playSound(null, pos, dev.vintagepc.VintagePC.PC_BOOT.get(), net.minecraft.sounds.SoundSource.BLOCKS, 0.9f, 1f);
                 s = new Session();
                 s.host = p.getUUID();
                 s.hostName = p.getGameProfile().getName();

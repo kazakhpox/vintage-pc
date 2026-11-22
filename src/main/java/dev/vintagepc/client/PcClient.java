@@ -41,6 +41,7 @@ public final class PcClient {
     private static int lastHurtTime;
 
     static void init() {
+        PcCamera.init();
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) -> tick());
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Post e) -> {
             if (hasMcef() && !hosting.isEmpty()) HostSide.captureTick();

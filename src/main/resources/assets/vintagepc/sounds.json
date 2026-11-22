@@ -1,0 +1,11 @@
+{
+ "pc_boot": {
+  "sounds": [
+   {
+    "name": "vintagepc:pc_boot",
+    "stream": false
+   }
+  ],
+  "subtitle": "subtitles.vintagepc.pc_boot"
+ }
+}

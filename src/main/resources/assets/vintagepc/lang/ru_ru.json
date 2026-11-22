@@ -31,5 +31,7 @@
   "vintagepc.case_empty": "Корпус пуст",
   "vintagepc.tower_ok": "Вышка Wi-Fi «%s» работает",
   "vintagepc.tower_unnamed": "без имени",
-  "vintagepc.tower_incomplete": "Вышка не собрана: нужно %s+ секций мачты над основанием и антенна сверху"
+  "vintagepc.tower_incomplete": "Вышка не собрана: нужно %s+ секций мачты над основанием и антенна сверху",
+  "subtitles.vintagepc.pc_boot": "Компьютер включается",
+  "vintagepc.host_hint": "Shift+Esc — встать из-за компьютера"
 }
