@@ -21,7 +21,7 @@ import java.util.Map;
 public final class PcClient {
     /** Сессии, где этот клиент — хост: pos → [контролёр ("" = я), число зрителей]. */
     static final Map<BlockPos, HostInfo> hosting = new HashMap<>();
-    static final class HostInfo { String controller = ""; int viewers; }
+    static final class HostInfo { String controller = ""; int viewers, nearby; }
 
     static boolean hasMcef() { return ModList.get().isLoaded("mcef"); }
 
@@ -36,8 +36,11 @@ public final class PcClient {
     }
 
     /** Закрываем экран ПК, если игрока ударили — иначе за монитором можно молча умереть. */
+    private static int ticks;
+
     private static void tick() {
         Minecraft mc = Minecraft.getInstance();
+        if (++ticks % 20 == 0) ScreenTextures.expire();
         var p = mc.player;
         if (p == null) { lastHealth = -1; return; }
         boolean atPc = mc.screen instanceof PcScreenMarker;
@@ -69,19 +72,20 @@ public final class PcClient {
 
     public static void onClosed(PcPayloads.Closed p) {
         Minecraft mc = Minecraft.getInstance();
+        ScreenTextures.release(p.pos());
         if (hosting.remove(p.pos()) != null && hasMcef()) HostSide.close(p.pos());
         if (mc.screen instanceof PcScreenMarker m && m.pos().equals(p.pos())) mc.setScreen(null);
     }
 
     public static void onState(PcPayloads.State p) {
         HostInfo h = hosting.get(p.pos());
-        if (h != null) { h.controller = p.controller(); h.viewers = p.viewers(); }
+        if (h != null) { h.controller = p.controller(); h.viewers = p.viewers(); h.nearby = p.nearby(); }
         if (Minecraft.getInstance().screen instanceof ViewerScreen v && v.pos().equals(p.pos()))
             v.setState(p.controller(), p.viewers());
     }
 
     public static void onFrame(PcPayloads.Frame p) {
-        if (Minecraft.getInstance().screen instanceof ViewerScreen v && v.pos().equals(p.pos())) v.acceptChunk(p);
+        if (!hosting.containsKey(p.pos())) ScreenTextures.acceptChunk(p);
     }
 
     public static void onInput(PcPayloads.Input p) {
@@ -90,6 +94,7 @@ public final class PcClient {
 
     /** ПК «выключили» из меню Пуск или браузер вытеснен — освобождаем место за компьютером. */
     static void shutdown(BlockPos pos) {
+        ScreenTextures.release(pos);
         if (hosting.remove(pos) == null) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof PcScreenMarker m && m.pos().equals(pos)) mc.setScreen(null);
@@ -98,6 +103,7 @@ public final class PcClient {
     }
 
     static void onLogout() {
+        ScreenTextures.releaseAll();
         hosting.clear();
         if (hasMcef()) HostSide.closeAll();
     }

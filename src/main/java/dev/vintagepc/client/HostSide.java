@@ -28,7 +28,8 @@ import java.util.zip.CRC32;
  * но раз в 2 секунды уходит опорный кадр для только что подошедших игроков.
  */
 final class HostSide {
-    private static final int FPS = 6, MAX_W = 854, QUALITY = 60;
+    /** 6 к/с, когда кто-то сидит за экраном; 2 к/с, когда монитор только видят рядом в мире. */
+    private static final int FPS_VIEWERS = 6, FPS_NEARBY = 2, MAX_W = 854, QUALITY = 60;
     private static final ExecutorService encoder = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "VintagePC-encoder");
         t.setDaemon(true);
@@ -49,6 +50,12 @@ final class HostSide {
     static void closeAll() {
         BrowserPool.closeAll();
         stats.clear();
+    }
+
+    /** id GL-текстуры Chromium для монитора в мире (берётся заново каждый кадр — MCEF может её пересоздать). */
+    static java.util.function.IntSupplier textureId(BlockPos pos) {
+        if (BrowserPool.peek(pos) == null) return null;
+        return () -> { MCEFBrowser b = BrowserPool.peek(pos); return b == null ? 0 : b.getRenderer().getTextureID(); };
     }
 
     static void inject(PcPayloads.Input in) {
@@ -72,10 +79,12 @@ final class HostSide {
     static void captureTick() {
         long now = System.currentTimeMillis();
         for (var e : PcClient.hosting.entrySet()) {
-            if (e.getValue().viewers <= 0) continue;
+            var info = e.getValue();
+            if (info.viewers <= 0 && info.nearby <= 0) continue;
+            int fps = info.viewers > 0 ? FPS_VIEWERS : FPS_NEARBY;
             BlockPos pos = e.getKey();
             long[] st = stats.computeIfAbsent(pos, k -> new long[4]);
-            if (now - st[0] < 1000 / FPS || busy.get()) continue;
+            if (now - st[0] < 1000 / fps || busy.get()) continue;
             MCEFBrowser b = BrowserPool.peek(pos);
             if (b == null) continue;
             st[0] = now;

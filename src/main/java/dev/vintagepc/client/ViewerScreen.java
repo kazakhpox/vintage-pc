@@ -1,26 +1,13 @@
 package dev.vintagepc.client;
 
-import com.mojang.blaze3d.platform.NativeImage;
-import dev.vintagepc.VintagePC;
 import dev.vintagepc.net.PcPayloads;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.stb.STBImage;
-import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Зритель чужого ПК (hotseat): видит трансляцию экрана хоста; F8 — взять/отдать управление,
@@ -28,21 +15,11 @@ import java.util.concurrent.Executors;
  */
 final class ViewerScreen extends Screen implements PcScreenMarker {
     private static final int M = PcScreen.MARGIN;
-    private static final ResourceLocation TEX = VintagePC.id("dynamic/pc_viewer");
-    private static final ExecutorService decoder = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "VintagePC-decoder");
-        t.setDaemon(true);
-        return t;
-    });
 
     private final BlockPos pos;
     private final String hostName;
     private String controller = "";
     private int viewers;
-    private DynamicTexture texture;
-    private int texW, texH;
-    private int frameId = -1, got, total;
-    private ByteArrayOutputStream parts = new ByteArrayOutputStream();
     private long lastMove;
 
     ViewerScreen(BlockPos pos, String hostName) {
@@ -59,52 +36,13 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
         return minecraft != null && minecraft.player != null && controller.equals(minecraft.player.getGameProfile().getName());
     }
 
-    void acceptChunk(PcPayloads.Frame f) {
-        if (f.frame() != frameId) { frameId = f.frame(); got = 0; total = f.total(); parts = new ByteArrayOutputStream(); }
-        if (f.index() != got) { frameId = -1; return; } // потеря/перестановка — ждём следующий кадр
-        parts.writeBytes(f.data());
-        if (++got < total) return;
-        byte[] jpg = parts.toByteArray();
-        frameId = -1;
-        decoder.execute(() -> decode(jpg));
-    }
-
-    private void decode(byte[] jpg) {
-        ByteBuffer src = MemoryUtil.memAlloc(jpg.length).put(jpg).flip();
-        try (MemoryStack st = MemoryStack.stackPush()) {
-            IntBuffer w = st.mallocInt(1), h = st.mallocInt(1), c = st.mallocInt(1);
-            ByteBuffer px = STBImage.stbi_load_from_memory(src, w, h, c, 4);
-            if (px == null) return;
-            int W = w.get(0), H = h.get(0);
-            NativeImage img = new NativeImage(NativeImage.Format.RGBA, W, H, false);
-            px.order(ByteOrder.LITTLE_ENDIAN);
-            for (int y = 0; y < H; y++)
-                for (int x = 0; x < W; x++) img.setPixelRGBA(x, y, px.getInt((y * W + x) * 4)); // RGBA байты = ABGR int
-            STBImage.stbi_image_free(px);
-            Minecraft.getInstance().execute(() -> upload(img));
-        } finally {
-            MemoryUtil.memFree(src);
-        }
-    }
-
-    private void upload(NativeImage img) {
-        if (minecraft == null || minecraft.screen != this) { img.close(); return; }
-        if (texture == null || texW != img.getWidth() || texH != img.getHeight()) {
-            if (texture != null) minecraft.getTextureManager().release(TEX);
-            texture = new DynamicTexture(img);
-            texW = img.getWidth(); texH = img.getHeight();
-            minecraft.getTextureManager().register(TEX, texture);
-        } else {
-            texture.setPixels(img);
-            texture.upload();
-        }
-    }
-
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, width, height, 0xFF2B2A26);
         g.fill(M - 2, M - 2, width - M + 2, height - M + 2, 0xFF000000);
-        if (texture != null) g.blit(TEX, M, M, width - 2 * M, height - 2 * M, 0, 0, texW, texH, texW, texH);
+        ResourceLocation tex = ScreenTextures.get(pos);
+        int[] sz = ScreenTextures.size(pos);
+        if (tex != null && sz != null) g.blit(tex, M, M, width - 2 * M, height - 2 * M, 0, 0, sz[0], sz[1], sz[0], sz[1]);
         else g.drawCenteredString(font, Component.translatable("vintagepc.viewer_wait", hostName), width / 2, height / 2, 0xFFFFFF);
 
         Component status = inControl()
@@ -153,7 +91,5 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
     @Override
     public void removed() {
         PcClient.send(new PcPayloads.Leave(pos));
-        if (texture != null && minecraft != null) minecraft.getTextureManager().release(TEX);
-        texture = null;
     }
 }

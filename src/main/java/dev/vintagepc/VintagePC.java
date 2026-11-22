@@ -1,6 +1,10 @@
 package dev.vintagepc;
 
 import dev.vintagepc.block.RetroPcBlock;
+import dev.vintagepc.block.RetroPcBlockEntity;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import java.util.function.Supplier;
 import dev.vintagepc.net.LanHub;
 import dev.vintagepc.net.LanPayloads;
 import dev.vintagepc.net.PcSessions;
@@ -31,6 +35,11 @@ public final class VintagePC {
             BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.METAL).noOcclusion());
     public static final DeferredItem<BlockItem> RETRO_PC_ITEM = ITEMS.registerSimpleBlockItem(RETRO_PC);
 
+    private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
+    @SuppressWarnings("DataFlowIssue")
+    public static final Supplier<BlockEntityType<RetroPcBlockEntity>> RETRO_PC_BE = BLOCK_ENTITIES.register("retro_pc",
+            () -> BlockEntityType.Builder.of(RetroPcBlockEntity::new, RETRO_PC.get()).build(null));
+
     public static ResourceLocation id(String path) {
         return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
     }
@@ -38,6 +47,7 @@ public final class VintagePC {
     public VintagePC(IEventBus modBus) {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
+        BLOCK_ENTITIES.register(modBus);
         modBus.addListener(LanPayloads::register);
         modBus.addListener((BuildCreativeModeTabContentsEvent e) -> {
             if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) e.accept(RETRO_PC_ITEM);

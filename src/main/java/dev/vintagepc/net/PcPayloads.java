@@ -39,12 +39,12 @@ public final class PcPayloads {
         @Override public Type<Leave> type() { return TYPE; }
     }
 
-    /** Состояние сессии для всех участников: кто управляет ("" — хост) и сколько зрителей. */
-    public record State(BlockPos pos, String controller, int viewers) implements CustomPacketPayload {
+    /** Состояние сессии: кто управляет ("" — хост), сколько зрителей за экраном и сколько видят монитор рядом. */
+    public record State(BlockPos pos, String controller, int viewers, int nearby) implements CustomPacketPayload {
         public static final Type<State> TYPE = new Type<>(VintagePC.id("pc_state"));
         public static final StreamCodec<FriendlyByteBuf, State> CODEC = StreamCodec.of(
-                (b, p) -> { b.writeBlockPos(p.pos); b.writeUtf(p.controller, 32); b.writeVarInt(p.viewers); },
-                b -> new State(b.readBlockPos(), b.readUtf(32), b.readVarInt()));
+                (b, p) -> { b.writeBlockPos(p.pos); b.writeUtf(p.controller, 32); b.writeVarInt(p.viewers); b.writeVarInt(p.nearby); },
+                b -> new State(b.readBlockPos(), b.readUtf(32), b.readVarInt(), b.readVarInt()));
         @Override public Type<State> type() { return TYPE; }
     }
 

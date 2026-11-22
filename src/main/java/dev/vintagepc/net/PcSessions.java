@@ -22,7 +22,7 @@ import java.util.*;
  * Хост в любой момент может забрать управление обратно.
  */
 public final class PcSessions {
-    private static final double VIEW_RANGE = 8, HOST_TAKEOVER_RANGE = 48;
+    private static final double VIEW_RANGE = 8, AMBIENT_RANGE = 24, HOST_TAKEOVER_RANGE = 48;
     private static final int MAX_FRAME_BYTES_PER_TICK = 96 * 1024;
     private static final int MAX_INPUTS_PER_TICK = 40;
 
@@ -31,6 +31,8 @@ public final class PcSessions {
         String hostName;
         UUID controller; // null — управляет хост
         final Set<UUID> viewers = new LinkedHashSet<>();
+        /** Игроки рядом, которые видят монитор в мире (получают кадры с пониженной частотой). */
+        final Set<UUID> ambient = new HashSet<>();
         int frameBudget, inputBudget;
     }
 
@@ -109,9 +111,11 @@ public final class PcSessions {
     static void onFrame(PcPayloads.Frame p, IPayloadContext ctx) {
         if (!(ctx.player() instanceof ServerPlayer sp)) return;
         Session s = sessions.get(GlobalPos.of(sp.level().dimension(), p.pos()));
-        if (s == null || !s.host.equals(sp.getUUID()) || s.viewers.isEmpty()) return;
+        if (s == null || !s.host.equals(sp.getUUID()) || (s.viewers.isEmpty() && s.ambient.isEmpty())) return;
         if ((s.frameBudget += p.data().length) > MAX_FRAME_BYTES_PER_TICK) return;
-        for (UUID v : s.viewers) {
+        Set<UUID> to = new HashSet<>(s.viewers);
+        to.addAll(s.ambient);
+        for (UUID v : to) {
             ServerPlayer vp = sp.server.getPlayerList().getPlayer(v);
             if (vp != null) send(vp, p);
         }
@@ -131,8 +135,9 @@ public final class PcSessions {
         for (var it = sessions.entrySet().iterator(); it.hasNext(); ) {
             var e = it.next();
             Session s = e.getValue();
+            s.ambient.remove(p.getUUID());
             if (s.host.equals(p.getUUID())) {
-                for (UUID v : s.viewers) {
+                for (UUID v : participants(s)) {
                     ServerPlayer vp = p.server.getPlayerList().getPlayer(v);
                     if (vp != null) send(vp, new PcPayloads.Closed(e.getKey().pos()));
                 }
@@ -159,6 +164,16 @@ public final class PcSessions {
                     changed = true;
                 }
             }
+            // Кто стоит рядом и видит монитор в мире
+            Set<UUID> near = new HashSet<>();
+            for (ServerPlayer p : server.getPlayerList().getPlayers())
+                if (!p.getUUID().equals(s.host) && p.level().dimension() == e.getKey().dimension()
+                        && p.distanceToSqr(pos.getCenter()) <= AMBIENT_RANGE * AMBIENT_RANGE) near.add(p.getUUID());
+            for (UUID gone : s.ambient) if (!near.contains(gone) && !s.viewers.contains(gone)) {
+                ServerPlayer gp = server.getPlayerList().getPlayer(gone);
+                if (gp != null) send(gp, new PcPayloads.Closed(pos)); // освободить текстуру у ушедшего
+            }
+            if (!near.equals(s.ambient)) { s.ambient.clear(); s.ambient.addAll(near); changed = true; }
             if (changed) broadcastState(server, e.getKey(), s);
         }
     }
@@ -177,7 +192,7 @@ public final class PcSessions {
             ServerPlayer c = server.getPlayerList().getPlayer(s.controller);
             ctrl = c != null ? c.getGameProfile().getName() : "";
         }
-        var state = new PcPayloads.State(key.pos(), ctrl, s.viewers.size());
+        var state = new PcPayloads.State(key.pos(), ctrl, s.viewers.size(), s.ambient.size());
         for (UUID id : participants(s)) {
             ServerPlayer p = server.getPlayerList().getPlayer(id);
             if (p != null) send(p, state);
@@ -185,7 +200,9 @@ public final class PcSessions {
     }
 
     private static List<UUID> participants(Session s) {
-        List<UUID> l = new ArrayList<>(s.viewers);
+        Set<UUID> all = new LinkedHashSet<>(s.viewers);
+        all.addAll(s.ambient);
+        List<UUID> l = new ArrayList<>(all);
         l.add(s.host);
         return l;
     }
