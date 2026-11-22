@@ -1,0 +1,5 @@
+{
+  "block.vintagepc.retro_pc": "Retro PC",
+  "vintagepc.no_mcef": "Vintage PC needs MCEF (Chromium) installed on the client.",
+  "vintagepc.booting": "Booting... (Shift+Esc to leave)"
+}

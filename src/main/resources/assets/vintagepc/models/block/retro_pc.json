@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "vintagepc:block/retro_pc_front",
+    "side": "vintagepc:block/retro_pc_side",
+    "top": "vintagepc:block/retro_pc_top"
+  }
+}

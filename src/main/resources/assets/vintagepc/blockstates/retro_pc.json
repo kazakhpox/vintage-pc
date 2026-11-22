@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "vintagepc:block/retro_pc" },
+    "facing=east":  { "model": "vintagepc:block/retro_pc", "y": 90 },
+    "facing=south": { "model": "vintagepc:block/retro_pc", "y": 180 },
+    "facing=west":  { "model": "vintagepc:block/retro_pc", "y": 270 }
+  }
+}

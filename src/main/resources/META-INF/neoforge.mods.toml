@@ -1,0 +1,33 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "Vintage PC"
+description = '''
+Компьютер из 2000-х: оболочка Win98/XP в Chromium (MCEF), WASM-игры
+и виртуальная локальная сеть через сервер Minecraft.
+'''
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "mcef"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "CLIENT"
