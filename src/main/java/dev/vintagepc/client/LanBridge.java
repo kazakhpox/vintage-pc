@@ -161,6 +161,8 @@ public final class LanBridge {
             JsonObject o;
             try { o = JsonParser.parseString(text).getAsJsonObject(); } catch (Exception e) { return; }
             String op = o.has("op") ? o.get("op").getAsString() : "";
+            if (op.equals("boot")) { PcClient.shellBooted(st.pc); VintagePC.LOG.info("Vintage PC shell loaded at {} ({})", st.pc.toShortString(), o.has("ua") ? o.get("ua").getAsString() : "?"); return; }
+            if (op.equals("log")) { VintagePC.LOG.warn("Vintage PC page error [{}]: {}", o.has("page") ? o.get("page").getAsString() : "?", o.has("msg") ? o.get("msg").getAsString() : ""); return; }
             if (op.equals("shutdown")) { // «Пуск → Завершение работы»
                 Minecraft.getInstance().execute(() -> PcClient.shutdown(st.pc));
                 return;

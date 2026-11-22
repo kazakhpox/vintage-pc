@@ -35,6 +35,31 @@ public final class PcClient {
         LanBridge.netChanged(p.pos(), info);
     }
 
+    /** Время создания браузера ПК → ждём сигнала «оболочка загрузилась». */
+    private static final Map<BlockPos, Long> booting = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<BlockPos, Integer> bootRetries = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static void browserCreated(BlockPos pos) { booting.put(pos, System.currentTimeMillis()); }
+    static void shellBooted(BlockPos pos) { booting.remove(pos); bootRetries.remove(pos); }
+
+    /** Белый экран: оболочка не ответила за 12 с — перезагружаем страницу, после 2 попыток подсказываем, что делать. */
+    private static void checkBoot() {
+        long now = System.currentTimeMillis();
+        for (var e : booting.entrySet()) {
+            if (now - e.getValue() < 12_000) continue;
+            BlockPos pos = e.getKey();
+            int n = bootRetries.merge(pos, 1, Integer::sum);
+            booting.put(pos, now);
+            dev.vintagepc.VintagePC.LOG.warn("Vintage PC shell at {} did not load (attempt {}), MCEF ready={}", pos.toShortString(), n, hasMcef() && HostSide.ready());
+            if (n <= 2 && hasMcef()) HostSide.reload(pos, LanBridge.shellUrl(key(pos)));
+            else {
+                booting.remove(pos);
+                var p = Minecraft.getInstance().player;
+                if (p != null) p.displayClientMessage(Component.translatable("vintagepc.white_screen"), false);
+            }
+        }
+    }
+
     static boolean hasMcef() { return ModList.get().isLoaded("mcef"); }
 
     private static float lastHealth = -1;
@@ -53,7 +78,7 @@ public final class PcClient {
 
     private static void tick() {
         Minecraft mc = Minecraft.getInstance();
-        if (++ticks % 20 == 0) ScreenTextures.expire();
+        if (++ticks % 20 == 0) { ScreenTextures.expire(); checkBoot(); }
         var p = mc.player;
         if (p == null) { lastHealth = -1; return; }
         boolean atPc = mc.screen instanceof PcScreenMarker;
@@ -108,6 +133,7 @@ public final class PcClient {
 
     /** ПК «выключили» из меню Пуск или браузер вытеснен — освобождаем место за компьютером. */
     static void shutdown(BlockPos pos) {
+        booting.remove(pos);
         ScreenTextures.release(pos);
         if (nets.remove(pos) != null) LanBridge.netChanged(pos, null);
         if (hosting.remove(pos) == null) return;

@@ -14,13 +14,14 @@
 (function () {
   const enc = new TextEncoder(), dec = new TextDecoder();
   const subs = new Map(), status = new Set(), linkFns = new Set();
+  const pending = [];
   let ws = null, player = 'offline', online = false, link = { up: false, label: '', pcs: 0, via: '', wifi: { card: false, target: '', towers: [] } };
   const q = new URLSearchParams(location.search);
 
   function connect() {
     ws = new WebSocket(`ws://${location.host}/lan?pc=${encodeURIComponent(api.pc)}`);
     ws.binaryType = 'arraybuffer';
-    ws.onopen = () => subs.forEach((_, ch) => ws.send(JSON.stringify({ op: 'join', ch })));
+    ws.onopen = () => { subs.forEach((_, ch) => ws.send(JSON.stringify({ op: 'join', ch }))); pending.splice(0).forEach(m => ws.send(m)); };
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
@@ -87,7 +88,7 @@
     },
     /** Подключиться к вышке Wi-Fi (id из link.wifi.towers) или отключиться (''). */
     wifiConnect(id) { api.control({ op: 'wifi', tower: id || '' }); },
-    control(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); },
+    control(obj) { const m = JSON.stringify(obj); if (ws && ws.readyState === 1) ws.send(m); else if (pending.length < 20) pending.push(m); },
 
     room(name) {
       const ch = 'room:' + safe(name), fns = new Set();
@@ -197,5 +198,9 @@
   };
 
   window.VPCNet = api;
+  // Ошибки страницы — в logs/latest.log игры (помогает разбирать «белый экран»)
+  const report = (msg) => { try { api.control({ op: 'log', msg: String(msg).slice(0, 500), page: location.pathname }); } catch {} };
+  addEventListener('error', (e) => report(e.message + ' @ ' + (e.filename || '') + ':' + (e.lineno || '')));
+  addEventListener('unhandledrejection', (e) => report('promise: ' + (e.reason && e.reason.message || e.reason)));
   connect();
 })();

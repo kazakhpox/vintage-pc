@@ -34,5 +34,7 @@
   "vintagepc.tower_incomplete": "Вышка не собрана: нужно %s+ секций мачты над основанием и антенна сверху",
   "subtitles.vintagepc.pc_boot": "Компьютер включается",
   "vintagepc.host_hint": "Shift+Esc — встать из-за компьютера",
-  "vintagepc.screen_blocked": "Перед монитором что-то стоит — освободите место перед экраном"
+  "vintagepc.screen_blocked": "Перед монитором что-то стоит — освободите место перед экраном",
+  "vintagepc.white_screen": "Оболочка ПК не загрузилась (белый экран). Проверьте: 1) MCEF установлен и при первом запуске докачал Chromium (в логе «Chromium Embedded Framework initialized»); 2) обновите драйвер видеокарты; 3) пришлите строки «Vintage PC» из logs/latest.log.",
+  "itemGroup.vintagepc": "Vintage PC"
 }

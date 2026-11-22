@@ -1,8 +1,148 @@
 {
- "parent": "minecraft:block/orientable",
+ "parent": "minecraft:block/block",
  "textures": {
   "front": "vintagepc:block/retro_pc_front_off",
-  "side": "vintagepc:block/retro_pc_side_open",
-  "top": "vintagepc:block/retro_pc_top"
- }
+  "side": "vintagepc:block/retro_pc_side",
+  "top": "vintagepc:block/retro_pc_top",
+  "inside": "vintagepc:block/retro_pc_inside",
+  "particle": "vintagepc:block/retro_pc_side"
+ },
+ "elements": [
+  {
+   "from": [
+    0,
+    0,
+    0
+   ],
+   "to": [
+    16,
+    16,
+    2
+   ],
+   "faces": {
+    "north": {
+     "texture": "#front"
+    },
+    "south": {
+     "texture": "#inside"
+    },
+    "east": {
+     "texture": "#side"
+    },
+    "west": {
+     "texture": "#side"
+    },
+    "up": {
+     "texture": "#top"
+    },
+    "down": {
+     "texture": "#top"
+    }
+   }
+  },
+  {
+   "from": [
+    0,
+    0,
+    14
+   ],
+   "to": [
+    16,
+    16,
+    16
+   ],
+   "faces": {
+    "south": {
+     "texture": "#side"
+    },
+    "north": {
+     "texture": "#inside"
+    },
+    "east": {
+     "texture": "#side"
+    },
+    "west": {
+     "texture": "#side"
+    },
+    "up": {
+     "texture": "#top"
+    },
+    "down": {
+     "texture": "#top"
+    }
+   }
+  },
+  {
+   "from": [
+    0,
+    14,
+    2
+   ],
+   "to": [
+    16,
+    16,
+    14
+   ],
+   "faces": {
+    "up": {
+     "texture": "#top"
+    },
+    "down": {
+     "texture": "#inside"
+    },
+    "east": {
+     "texture": "#side"
+    },
+    "west": {
+     "texture": "#side"
+    }
+   }
+  },
+  {
+   "from": [
+    0,
+    0,
+    2
+   ],
+   "to": [
+    16,
+    2,
+    14
+   ],
+   "faces": {
+    "down": {
+     "texture": "#top"
+    },
+    "up": {
+     "texture": "#inside"
+    },
+    "east": {
+     "texture": "#side"
+    },
+    "west": {
+     "texture": "#side"
+    }
+   }
+  },
+  {
+   "from": [
+    14,
+    2,
+    2
+   ],
+   "to": [
+    16,
+    14,
+    14
+   ],
+   "faces": {
+    "east": {
+     "texture": "#side"
+    },
+    "west": {
+     "texture": "#inside"
+    }
+   }
+  }
+ ]
 }

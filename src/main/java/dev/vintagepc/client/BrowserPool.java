@@ -27,6 +27,8 @@ final class BrowserPool {
         }
         b = MCEF.createBrowser(url, false);
         browsers.put(pos, b);
+        PcClient.browserCreated(pos);
+        dev.vintagepc.VintagePC.LOG.info("Vintage PC browser created for {} -> {}", pos.toShortString(), url.replaceAll("t=[0-9a-f]+", "t=***"));
         return b;
     }
 

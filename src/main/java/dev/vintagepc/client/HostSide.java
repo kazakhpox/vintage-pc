@@ -42,6 +42,13 @@ final class HostSide {
         Minecraft.getInstance().setScreen(new PcScreen(pos, LanBridge.shellUrl(PcClient.key(pos))));
     }
 
+    static boolean ready() { return BrowserPool.ready(); }
+
+    static void reload(BlockPos pos, String url) {
+        MCEFBrowser b = BrowserPool.peek(pos);
+        if (b != null) b.loadURL(url);
+    }
+
     static void close(BlockPos pos) {
         BrowserPool.close(pos);
         stats.remove(pos);

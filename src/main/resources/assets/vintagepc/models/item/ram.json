@@ -1,6 +1,295 @@
 {
- "parent": "minecraft:item/generated",
+ "parent": "minecraft:block/block",
  "textures": {
-  "layer0": "vintagepc:item/ram"
+  "pcb": "vintagepc:item/part_pcb",
+  "chip": "vintagepc:item/part_chip",
+  "metal": "vintagepc:item/part_metal",
+  "gold": "vintagepc:item/part_gold",
+  "dark": "vintagepc:item/part_dark",
+  "fan": "vintagepc:item/part_fan",
+  "grille": "vintagepc:item/part_grille",
+  "label": "vintagepc:item/part_label",
+  "particle": "vintagepc:item/part_pcb"
+ },
+ "elements": [
+  {
+   "from": [
+    1,
+    0,
+    7
+   ],
+   "to": [
+    15,
+    6,
+    8.5
+   ],
+   "faces": {
+    "north": {
+     "texture": "#pcb"
+    },
+    "south": {
+     "texture": "#pcb"
+    },
+    "east": {
+     "texture": "#pcb"
+    },
+    "west": {
+     "texture": "#pcb"
+    },
+    "up": {
+     "texture": "#pcb"
+    },
+    "down": {
+     "texture": "#pcb"
+    }
+   }
+  },
+  {
+   "from": [
+    2,
+    1.5,
+    6.5
+   ],
+   "to": [
+    4.5,
+    4.5,
+    7
+   ],
+   "faces": {
+    "north": {
+     "texture": "#chip"
+    },
+    "south": {
+     "texture": "#chip"
+    },
+    "east": {
+     "texture": "#chip"
+    },
+    "west": {
+     "texture": "#chip"
+    },
+    "up": {
+     "texture": "#chip"
+    },
+    "down": {
+     "texture": "#chip"
+    }
+   }
+  },
+  {
+   "from": [
+    5.5,
+    1.5,
+    6.5
+   ],
+   "to": [
+    8,
+    4.5,
+    7
+   ],
+   "faces": {
+    "north": {
+     "texture": "#chip"
+    },
+    "south": {
+     "texture": "#chip"
+    },
+    "east": {
+     "texture": "#chip"
+    },
+    "west": {
+     "texture": "#chip"
+    },
+    "up": {
+     "texture": "#chip"
+    },
+    "down": {
+     "texture": "#chip"
+    }
+   }
+  },
+  {
+   "from": [
+    9,
+    1.5,
+    6.5
+   ],
+   "to": [
+    11.5,
+    4.5,
+    7
+   ],
+   "faces": {
+    "north": {
+     "texture": "#chip"
+    },
+    "south": {
+     "texture": "#chip"
+    },
+    "east": {
+     "texture": "#chip"
+    },
+    "west": {
+     "texture": "#chip"
+    },
+    "up": {
+     "texture": "#chip"
+    },
+    "down": {
+     "texture": "#chip"
+    }
+   }
+  },
+  {
+   "from": [
+    12,
+    1.5,
+    6.5
+   ],
+   "to": [
+    14,
+    4.5,
+    7
+   ],
+   "faces": {
+    "north": {
+     "texture": "#chip"
+    },
+    "south": {
+     "texture": "#chip"
+    },
+    "east": {
+     "texture": "#chip"
+    },
+    "west": {
+     "texture": "#chip"
+    },
+    "up": {
+     "texture": "#chip"
+    },
+    "down": {
+     "texture": "#chip"
+    }
+   }
+  },
+  {
+   "from": [
+    1.5,
+    0,
+    6.9
+   ],
+   "to": [
+    14.5,
+    1,
+    8.6
+   ],
+   "faces": {
+    "north": {
+     "texture": "#gold"
+    },
+    "south": {
+     "texture": "#gold"
+    },
+    "east": {
+     "texture": "#gold"
+    },
+    "west": {
+     "texture": "#gold"
+    },
+    "up": {
+     "texture": "#gold"
+    },
+    "down": {
+     "texture": "#gold"
+    }
+   }
+  }
+ ],
+ "display": {
+  "gui": {
+   "rotation": [
+    30,
+    200,
+    0
+   ],
+   "translation": [
+    0,
+    1,
+    0
+   ],
+   "scale": [
+    0.8,
+    0.8,
+    0.8
+   ]
+  },
+  "ground": {
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    3,
+    0
+   ],
+   "scale": [
+    0.4,
+    0.4,
+    0.4
+   ]
+  },
+  "fixed": {
+   "rotation": [
+    90,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    0,
+    0
+   ],
+   "scale": [
+    0.7,
+    0.7,
+    0.7
+   ]
+  },
+  "thirdperson_righthand": {
+   "rotation": [
+    75,
+    45,
+    0
+   ],
+   "translation": [
+    0,
+    2.5,
+    0
+   ],
+   "scale": [
+    0.3,
+    0.3,
+    0.3
+   ]
+  },
+  "firstperson_righthand": {
+   "rotation": [
+    0,
+    45,
+    0
+   ],
+   "translation": [
+    0,
+    3,
+    0
+   ],
+   "scale": [
+    0.3,
+    0.3,
+    0.3
+   ]
+  }
  }
 }

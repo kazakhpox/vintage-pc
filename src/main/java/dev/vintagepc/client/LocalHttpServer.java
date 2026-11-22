@@ -158,7 +158,7 @@ final class LocalHttpServer {
                     LOG.warn("route {} failed", path, e);
                     r = Response.text(500, String.valueOf(e));
                 }
-                if (r == null) r = Response.text(404, "not found: " + path);
+                if (r == null) { LOG.warn("404 {}", path); r = Response.text(404, "not found: " + path); }
                 boolean keep = write(out, r, method, h, viaQuery);
                 if (!keep || "close".equalsIgnoreCase(h.get("connection"))) return;
             }

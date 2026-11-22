@@ -34,5 +34,7 @@
   "vintagepc.tower_incomplete": "Tower incomplete: needs %s+ mast sections above the base and an antenna on top",
   "subtitles.vintagepc.pc_boot": "Computer boots up",
   "vintagepc.host_hint": "Shift+Esc — step away from the PC",
-  "vintagepc.screen_blocked": "Something is blocking the monitor — clear the space in front of the screen"
+  "vintagepc.screen_blocked": "Something is blocking the monitor — clear the space in front of the screen",
+  "vintagepc.white_screen": "The PC shell did not load (white screen). Check: 1) MCEF is installed and finished downloading Chromium (\"Chromium Embedded Framework initialized\" in the log); 2) update your GPU driver; 3) send the \"Vintage PC\" lines from logs/latest.log.",
+  "itemGroup.vintagepc": "Vintage PC"
 }

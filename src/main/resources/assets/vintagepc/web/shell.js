@@ -87,6 +87,7 @@
     },
 
     async boot() {
+      VPCNet.control({ op: 'boot', ua: navigator.userAgent });
       await Promise.allSettled(VPC.pending);
       const desk = $('#desktop'), menu = $('#startitems');
       for (const a of apps) {

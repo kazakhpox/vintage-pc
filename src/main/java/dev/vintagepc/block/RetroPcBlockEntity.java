@@ -37,13 +37,29 @@ public class RetroPcBlockEntity extends BlockEntity {
         return m;
     }
 
-    public void add(PcPart p) { parts.add(p); setChanged(); }
+    public void add(PcPart p) { parts.add(p); changed(); }
+
+    /** Время (мс) установки каждой детали на клиенте — для анимации «въезжает в корпус». */
+    public final java.util.Map<PcPart, Long> insertedAt = new java.util.EnumMap<>(PcPart.class);
+
+    private void changed() {
+        setChanged();
+        if (level != null && !level.isClientSide) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider reg) { return saveWithoutMetadata(reg); }
+
+    @Override
+    public net.minecraft.network.protocol.Packet<net.minecraft.network.protocol.game.ClientGamePacketListener> getUpdatePacket() {
+        return net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(this);
+    }
 
     public PcPart removeLast() {
         if (parts.isEmpty()) return null;
         // материнская плата вынимается последней
         for (int i = parts.size() - 1; i >= 0; i--)
-            if (parts.get(i) != PcPart.MOTHERBOARD || parts.size() == 1) { PcPart p = parts.remove(i); setChanged(); return p; }
+            if (parts.get(i) != PcPart.MOTHERBOARD || parts.size() == 1) { PcPart p = parts.remove(i); changed(); return p; }
         return null;
     }
 
@@ -62,9 +78,15 @@ public class RetroPcBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider reg) {
         super.loadAdditional(tag, reg);
+        List<PcPart> before = new ArrayList<>(parts);
         parts.clear();
         for (Tag t : tag.getList("Parts", Tag.TAG_STRING))
             for (PcPart p : PcPart.values()) if (p.id.equals(t.getAsString()) && !parts.contains(p)) parts.add(p);
         wifiTower = tag.getLong("Wifi");
+        if (level != null && level.isClientSide) {                    // новая деталь — запускаем анимацию
+            long now = System.currentTimeMillis();
+            for (PcPart p : parts) if (!before.contains(p)) insertedAt.put(p, now);
+            insertedAt.keySet().retainAll(parts);
+        }
     }
 }

@@ -22,13 +22,11 @@ import dev.vintagepc.net.LanPayloads;
 import dev.vintagepc.net.PcSessions;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -70,6 +68,22 @@ public final class VintagePC {
     /** Включение ПК: писк POST, вентилятор, щелчки диска и стартовый аккорд (синтезирован для мода). */
     public static final DeferredHolder<SoundEvent, SoundEvent> PC_BOOT = SOUNDS.register("pc_boot", () -> SoundEvent.createVariableRangeEvent(id("pc_boot")));
 
+    private static final DeferredRegister<net.minecraft.world.item.CreativeModeTab> TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID);
+    /** Отдельная вкладка «Vintage PC» в творческом режиме. */
+    public static final DeferredHolder<net.minecraft.world.item.CreativeModeTab, net.minecraft.world.item.CreativeModeTab> TAB = TABS.register("main",
+            () -> net.minecraft.world.item.CreativeModeTab.builder()
+                    .title(net.minecraft.network.chat.Component.translatable("itemGroup.vintagepc"))
+                    .icon(() -> new net.minecraft.world.item.ItemStack(RETRO_PC_ITEM.get()))
+                    .displayItems((params, out) -> {
+                        out.accept(RETRO_PC_ITEM.get());
+                        VintagePC.PART_ITEMS.values().forEach(i -> out.accept(i.get()));
+                        out.accept(NETWORK_CABLE_ITEM.get());
+                        out.accept(ROUTER_ITEM.get());
+                        out.accept(WIFI_TOWER_BASE_ITEM.get());
+                        out.accept(WIFI_MAST_ITEM.get());
+                        out.accept(WIFI_ANTENNA_ITEM.get());
+                    }).build());
+
     /** Комплектующие ПК. */
     public static final java.util.Map<PcPart, DeferredItem<PcPartItem>> PART_ITEMS = new java.util.EnumMap<>(PcPart.class);
     static {
@@ -97,18 +111,8 @@ public final class VintagePC {
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
         SOUNDS.register(modBus);
+        TABS.register(modBus);
         modBus.addListener(LanPayloads::register);
-        modBus.addListener((BuildCreativeModeTabContentsEvent e) -> {
-            if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
-                e.accept(RETRO_PC_ITEM);
-                e.accept(ROUTER_ITEM);
-                e.accept(NETWORK_CABLE_ITEM);
-                e.accept(WIFI_TOWER_BASE_ITEM);
-                e.accept(WIFI_MAST_ITEM);
-                e.accept(WIFI_ANTENNA_ITEM);
-            }
-            if (e.getTabKey() == CreativeModeTabs.INGREDIENTS) PART_ITEMS.values().forEach(e::accept);
-        });
         LanHub.init(NeoForge.EVENT_BUS);
         PcSessions.init(NeoForge.EVENT_BUS);
     }
