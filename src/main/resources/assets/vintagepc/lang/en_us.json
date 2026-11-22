@@ -33,5 +33,6 @@
   "vintagepc.tower_unnamed": "unnamed",
   "vintagepc.tower_incomplete": "Tower incomplete: needs %s+ mast sections above the base and an antenna on top",
   "subtitles.vintagepc.pc_boot": "Computer boots up",
-  "vintagepc.host_hint": "Shift+Esc — step away from the PC"
+  "vintagepc.host_hint": "Shift+Esc — step away from the PC",
+  "vintagepc.screen_blocked": "Something is blocking the monitor — clear the space in front of the screen"
 }

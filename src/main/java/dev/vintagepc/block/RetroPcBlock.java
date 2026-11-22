@@ -83,8 +83,20 @@ public class RetroPcBlock extends Block implements EntityBlock {
             return InteractionResult.SUCCESS;
         }
         if (!be.complete()) { showMissing(player, be); return InteractionResult.SUCCESS; }
+        if (screenBlocked(level, pos, state)) { msg(player, Component.translatable("vintagepc.screen_blocked")); return InteractionResult.SUCCESS; }
         PcSessions.use(sp, pos);                                          // хост или зритель — решает сервер
         return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * Камера подлетает к экрану на ~0,6 блока — если перед монитором стоит что-то твёрдое,
+     * она оказалась бы внутри блока. Плоский кабель, цветы, факелы и т.п. (без коллизии) не мешают.
+     */
+    public static boolean screenBlocked(Level level, BlockPos pos, BlockState state) {
+        BlockPos front = pos.relative(state.getValue(FACING));
+        BlockState fs = level.getBlockState(front);
+        if (fs.getBlock() instanceof NetworkCableBlock) return false;
+        return !fs.getCollisionShape(level, front).isEmpty();
     }
 
     private static void afterChange(Level level, BlockPos pos, BlockState state, RetroPcBlockEntity be, Player player) {

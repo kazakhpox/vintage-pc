@@ -33,5 +33,6 @@
   "vintagepc.tower_unnamed": "без имени",
   "vintagepc.tower_incomplete": "Вышка не собрана: нужно %s+ секций мачты над основанием и антенна сверху",
   "subtitles.vintagepc.pc_boot": "Компьютер включается",
-  "vintagepc.host_hint": "Shift+Esc — встать из-за компьютера"
+  "vintagepc.host_hint": "Shift+Esc — встать из-за компьютера",
+  "vintagepc.screen_blocked": "Перед монитором что-то стоит — освободите место перед экраном"
 }

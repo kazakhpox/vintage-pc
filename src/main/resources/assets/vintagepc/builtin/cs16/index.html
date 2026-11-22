@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Counter-Strike 1.6</title>
+<link rel="stylesheet" href="/web/lib/98.css"><link rel="stylesheet" href="/web/player.css">
+<style>
+  #canvas { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; outline: none; }
+  #lobby .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+  #status { position: absolute; left: 0; right: 0; bottom: 0; color: #cfc; background: rgba(0,0,0,.6); font: 12px monospace; padding: 3px 6px; z-index: 5; white-space: pre-wrap; }
+  #missing { max-width: 420px; }
+  code { background: #fff; padding: 0 2px; }
+</style></head><body>
+<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<div id="status" hidden></div>
+<div id="lobby"><div class="window" style="width:400px"><div class="title-bar"><div class="title-bar-text">🔫 Counter-Strike 1.6</div></div>
+  <div class="window-body">
+    <div id="missing" hidden>
+      <p><b>Нет данных игры.</b> Мод содержит только открытый движок (Xash3D FWGS + cs16-client).
+      Положите <code>valve.zip</code> из своей копии CS 1.6 в папку
+      <code>.minecraft/vintagepc/cartridges/cs16/</code>.</p>
+      <p>Собрать архив: скрипт <code>get_cs_assets</code> из репозитория modesage/cs1.6-browser
+      или заархивируйте папки <code>valve</code> и <code>cstrike</code> из <code>steamapps/common/Half-Life</code>.</p>
+      <button onclick="location.reload()">Проверить снова</button>
+    </div>
+    <div id="menu" hidden>
+      <fieldset><legend>Своя игра</legend>
+        <div class="row"><label>Карта <select id="map"><option>de_dust2</option><option>de_dust</option><option>cs_assault</option><option>de_inferno</option><option>de_nuke</option><option>cs_office</option><option>de_aztec</option><option>cs_italy</option></select></label>
+          <label>Ботов <input id="bots" value="4" size="2"></label></div>
+        <div class="row"><button id="solo">Играть с ботами</button><button id="host">Создать сервер в сети</button></div>
+      </fieldset>
+      <p>Серверы в сети «<span id="net"></span>»:</p><ul id="hosts"></ul>
+    </div>
+  </div></div></div>
+<script src="/web/vpc-net.js"></script>
+<script src="xash-net.js"></script>
+<script src="engine/jszip.min.js"></script>
+<script type="module">
+import Xash3D from './engine/xash.js';
+/*
+ * CS 1.6 на Xash3D FWGS (WASM). Сервер поднимается прямо в браузере хоста (listen server),
+ * сеть — UDP поверх виртуального Ethernet через коммутатор на сервере Minecraft (xash-net.js).
+ * Лобби: хосты объявляют IP в комнате cs16-<сеть>; клиент подключается по 10.98.x.y:27015.
+ */
+const q = new URLSearchParams(location.search), net = q.get('net') || 'lan';
+const $ = (id) => document.getElementById(id);
+const status = (t) => { $('status').hidden = !t; $('status').textContent = t || ''; };
+const lobby = VPCNet.room('cs16-' + net), hosts = new Map();
+let mode = null, hosting = null;
+VPCNet.onLink((l) => $('net').textContent = !l.up ? 'кабель не подключён' : l.label === 'crossover' ? 'прямой кабель' : l.label);
+
+const FILES = {
+  'xash.wasm': 'engine/xash.wasm',
+  'filesystem_stdio.wasm': 'engine/filesystem_stdio.wasm',
+  '/rodir/filesystem_stdio.wasm': 'engine/filesystem_stdio.wasm',
+  'libref_webgl2.wasm': 'engine/libref_webgl2.wasm',
+  'cl_dlls/menu_emscripten_wasm32.wasm': 'engine/cl_dlls/menu_emscripten_wasm32.wasm',
+  'cl_dlls/client_emscripten_wasm32.wasm': 'engine/cl_dlls/client_emscripten_wasm32.wasm',
+  'dlls/cs_emscripten_wasm32.so': 'engine/dlls/cs_emscripten_wasm32.wasm',
+  'dlls/cs_emscripten_wasm32.wasm': 'engine/dlls/cs_emscripten_wasm32.wasm',
+  'dlls/hl_emscripten_wasm32.wasm': 'engine/dlls/cs_emscripten_wasm32.wasm',
+  'dlls/yapb_emscripten_wasm32.wasm': 'engine/dlls/yapb_emscripten_wasm32.wasm',
+};
+const LIBS = ['filesystem_stdio.wasm', 'libref_webgl2.wasm', 'cl_dlls/menu_emscripten_wasm32.wasm',
+  'dlls/cs_emscripten_wasm32.so', 'cl_dlls/client_emscripten_wasm32.wasm', '/rodir/filesystem_stdio.wasm'];
+
+
+async function readZip(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('valve.zip: HTTP ' + res.status);
+  const total = +res.headers.get('Content-Length') || 0, reader = res.body.getReader(), chunks = [];
+  let got = 0;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length;
+    status(`Загрузка данных игры… ${(got / 1048576) | 0}${total ? ' / ' + ((total / 1048576) | 0) : ''} МБ`); }
+  const zip = await JSZip.loadAsync(new Blob(chunks));
+  const names = Object.keys(zip.files).filter(n => !zip.files[n].dir);
+  const roots = new Set(names.map(n => n.replace(/\\/g, '/').replace(/^\.?\/+/, '').split('/')[0]));
+  if (!roots.has('valve') || !roots.has('cstrike')) throw new Error('В корне valve.zip должны быть папки valve/ и cstrike/');
+  const files = new Map(); let i = 0;
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    while (i < names.length) { const n = names[i++]; files.set(n.replace(/\\/g, '/').replace(/^\.?\/+/, ''), await zip.file(n).async('uint8array'));
+      if (files.size % 50 === 0) status(`Распаковка… ${files.size}/${names.length}`); }
+  }));
+  return files;
+}
+
+async function start(extraArgs, after) {
+  $('lobby').hidden = true;
+  try {
+    status('Загрузка движка…');
+    const files = await readZip('valve.zip');
+    const extras = await Promise.all(['engine/valve_extras.pk3', 'engine/yapb_addons.pk3'].map(u => fetch(u).then(r => r.arrayBuffer())));
+    status('Запуск движка…');
+    const xnet = new XashNet(`${net}.cs16`);
+    const canvas = $('canvas');
+    // Фабрика движка возвращает { Module, FS, ..., start }: сначала кладём файлы игры, потом start() → main()
+    const mod = {
+      canvas,
+      arguments: ['-ref', 'webgl2', '-windowed', '-game', 'cstrike', '+_vgui_menus', '0', '+sv_lan', '1', '+ip', xnet.ip, ...extraArgs],
+      dynamicLibraries: LIBS.concat(after.bots ? ['dlls/yapb_emscripten_wasm32.wasm'] : []),
+      locateFile: (p) => FILES[p] || p,
+      print: (t) => { console.log(t); if (/error|couldn|can't|failed/i.test(t)) status(t); },
+      printErr: (t) => console.warn(t),
+      onAbort: (what) => status('Движок остановился: ' + what),
+    };
+    xnet.hook(mod, FILES['xash.wasm']);
+    const em = window.csEm = await Xash3D(mod);
+    const FS = em.FS, made = new Set();
+    try { FS.mkdir('/rwdir'); } catch {}
+    const put = (path, data) => { const dir = path.slice(0, path.lastIndexOf('/')); if (!made.has(dir)) { FS.mkdirTree(dir); made.add(dir); } FS.writeFile(path, data, { canOwn: true }); };
+    for (const [p, d] of files) { put('/rodir/' + p, d); files.delete(p); }
+    put('/rodir/valve/extras.pk3', new Uint8Array(extras[0]));
+    put('/rodir/cstrike/yapb_addons.pk3', new Uint8Array(extras[1]));
+    FS.chdir('/rodir');
+    status('');
+    em.start();
+    canvas.focus();
+    if (after.cmds) setTimeout(() => after.cmds.forEach(c => em.Module.ccall('Cmd_ExecuteString', null, ['string'], [c])), after.delay || 4000);
+    window.xash = em;
+  } catch (e) {
+    console.error(e);
+    status('Ошибка: ' + (e.message || e));
+    $('lobby').hidden = false;
+  }
+}
+
+function botCmds() { const n = Math.max(0, Math.min(16, +$('bots').value || 0)); return Array.from({ length: n }, () => 'yb add'); }
+
+window.csStart = start;
+$('solo').onclick = () => { mode = 'solo'; start(['+maxplayers', '16', '+map', $('map').value], { bots: true, cmds: botCmds(), delay: 6000 }); };
+$('host').onclick = () => {
+  mode = 'host';
+  hosting = { name: VPCNet.player, ip: VPCNet.virtualIp ? ipStr(VPCNet.virtualIp()) : '', map: $('map').value };
+  start(['+maxplayers', '16', '+map', $('map').value, '+hostname', 'Vintage PC: ' + VPCNet.player], { bots: true, cmds: botCmds(), delay: 6000 });
+};
+function join(h) { mode = 'client'; start(['+connect', h.ip + ':27015'], {}); }
+function ipStr(n) { return [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.'); }
+
+lobby.on((m) => {
+  if (m.t === 'host' && m.ip) { hosts.set(m.ip, Object.assign(m, { seen: Date.now() })); render(); }
+  if (m.t === 'ask' && hosting) lobby.send(Object.assign({ t: 'host' }, hosting));
+});
+function render() {
+  if (mode) return;
+  const live = [...hosts.values()].filter(h => Date.now() - h.seen < 6000);
+  $('hosts').replaceChildren(...(live.length ? live.map(h => Object.assign(document.createElement('li'), {
+    textContent: `🖥️ ${h.name} — ${h.map} (${h.ip})`, onclick: () => join(h) }))
+    : [Object.assign(document.createElement('li'), { textContent: 'серверов нет — создайте свой', style: 'color:gray;cursor:default' })]));
+}
+setInterval(() => { if (hosting) lobby.send(Object.assign({ t: 'host' }, hosting)); else if (!mode) { lobby.send({ t: 'ask' }); render(); } }, 2000);
+
+fetch('valve.zip', { method: 'HEAD' }).then(r => { $(r.ok ? 'menu' : 'missing').hidden = false; render(); lobby.send({ t: 'ask' }); });
+</script>
+</body></html>

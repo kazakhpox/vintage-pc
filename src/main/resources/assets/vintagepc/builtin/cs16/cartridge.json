@@ -1,0 +1,9 @@
+{
+  "name": "Counter-Strike 1.6 (бета)",
+  "icon": "🔫",
+  "engine": "html",
+  "html": { "entry": "index.html" },
+  "net": { "mode": "udp", "ports": [27015, 27005] },
+  "width": 800, "height": 600,
+  "builtin": 1
+}
