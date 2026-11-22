@@ -107,8 +107,26 @@ public final class LanBridge {
 
     private static void sendLink(LocalHttpServer.Conn c, PcClient.NetInfo info) {
         boolean up = info != null && !info.id().isEmpty();
-        c.sendText("{\"op\":\"link\",\"up\":" + up + ",\"label\":" + jsonStr(up ? info.label() : "")
-                + ",\"pcs\":" + (info == null ? 0 : info.pcs()) + "}");
+        JsonObject o = new JsonObject();
+        o.addProperty("op", "link");
+        o.addProperty("up", up);
+        o.addProperty("label", up ? info.label() : "");
+        o.addProperty("pcs", info == null ? 0 : info.pcs());
+        o.addProperty("via", info == null ? "" : info.via());
+        JsonObject w = new JsonObject();
+        w.addProperty("card", info != null && info.wifiCard());
+        w.addProperty("target", info == null || info.wifiTarget() == 0 ? "" : Long.toHexString(info.wifiTarget()));
+        com.google.gson.JsonArray ts = new com.google.gson.JsonArray();
+        if (info != null) for (var t : info.towers()) {
+            JsonObject to = new JsonObject();
+            to.addProperty("id", Long.toHexString(t.pos()));
+            to.addProperty("name", t.name());
+            to.addProperty("distance", t.distance());
+            ts.add(to);
+        }
+        w.add("towers", ts);
+        o.add("wifi", w);
+        c.sendText(o.toString());
     }
 
     // ---------- входящие от сервера MC ----------
@@ -145,6 +163,13 @@ public final class LanBridge {
             String op = o.has("op") ? o.get("op").getAsString() : "";
             if (op.equals("shutdown")) { // «Пуск → Завершение работы»
                 Minecraft.getInstance().execute(() -> PcClient.shutdown(st.pc));
+                return;
+            }
+            if (op.equals("wifi")) { // «Беспроводная сеть → Подключить»
+                long tower = 0;
+                try { String t = o.has("tower") ? o.get("tower").getAsString() : ""; tower = t.isEmpty() ? 0 : Long.parseUnsignedLong(t, 16); }
+                catch (NumberFormatException e) { return; }
+                PcClient.send(new dev.vintagepc.net.PcPayloads.Wifi(st.pc, tower));
                 return;
             }
             String ch = o.has("ch") ? o.get("ch").getAsString() : "";

@@ -1,0 +1,7 @@
+{
+ "variants": {
+  "": {
+   "model": "vintagepc:block/wifi_mast"
+  }
+ }
+}

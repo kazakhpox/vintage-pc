@@ -24,13 +24,13 @@ public final class PcClient {
     static final class HostInfo { String controller = ""; int viewers, nearby; }
 
     /** Физическая сеть каждого своего ПК (из NetState). */
-    record NetInfo(String id, String label, int pcs) {}
+    record NetInfo(String id, String label, int pcs, String via, boolean wifiCard, long wifiTarget, java.util.List<PcPayloads.Tower> towers) {}
     private static final Map<BlockPos, NetInfo> nets = new java.util.concurrent.ConcurrentHashMap<>();
 
     static NetInfo netInfo(BlockPos pos) { return nets.get(pos); }
 
     public static void onNetState(PcPayloads.NetState p) {
-        NetInfo info = new NetInfo(p.net(), p.label(), p.pcs());
+        NetInfo info = new NetInfo(p.net(), p.label(), p.pcs(), p.via(), p.wifiCard(), p.wifiTarget(), p.towers());
         nets.put(p.pos(), info);
         LanBridge.netChanged(p.pos(), info);
     }

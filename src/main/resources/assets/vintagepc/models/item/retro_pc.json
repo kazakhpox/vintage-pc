@@ -1,1 +1,3 @@
-{ "parent": "vintagepc:block/retro_pc" }
+{
+ "parent": "vintagepc:block/retro_pc_open"
+}

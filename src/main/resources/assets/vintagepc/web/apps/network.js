@@ -39,7 +39,7 @@ VPC.register({
       const l = VPCNet.link;
       conn.textContent = !VPCNet.online ? '⚠ Нет связи с сервером Minecraft.'
         : !l.up ? '❌ Сетевой кабель не подключён. Проложите кабель от компьютера к роутеру (или напрямую к одному другому ПК).'
-        : `🖧 ${l.label === 'crossover' ? 'Прямое подключение кабелем' : 'Роутер «' + l.label + '»'} · компьютеров в сети: ${l.pcs}`;
+        : `${l.via === 'wifi' ? '📶 Беспроводная сеть «' + l.label + '»' : l.label === 'crossover' ? '🖧 Прямое подключение кабелем' : '🖧 Сеть «' + l.label + '»'} · компьютеров в сети: ${l.pcs}`;
       me.textContent = l.up ? `Вы: ${VPCNet.player}. Включённые компьютеры в сети:` : '';
       const t = VPC.el('table', { style: 'width:100%' }, VPC.el('tr', {}, ...['Компьютер', 'Игрок', 'IP', 'Запущено'].map(h => VPC.el('th', { textContent: h }))));
       for (const p of VPC.presence.peers.values())

@@ -110,11 +110,11 @@
       let wasUp = null;
       const net = () => {
         const l = VPCNet.link, ok = VPCNet.online && l.up;
-        $('#netled').textContent = ok ? '🖧' : '🖧❌';
+        $('#netled').textContent = !ok ? (l.wifi && l.wifi.card ? '📶❌' : '🖧❌') : l.via === 'wifi' ? '📶' : '🖧';
         $('#netled').classList.toggle('off', !ok);
         $('#netled').title = !VPCNet.online ? 'Нет связи с сервером' : !l.up ? 'Сетевой кабель не подключён'
-          : `Подключение по локальной сети: ${l.label === 'crossover' ? 'прямой кабель' : l.label} · компьютеров: ${l.pcs}`;
-        if (wasUp !== null && wasUp !== ok) VPC.balloon(ok ? 'Подключение по локальной сети' : 'Сетевой кабель не подключён',
+          : `${l.via === 'wifi' ? 'Беспроводная сеть' : 'Подключение по локальной сети'}: ${l.label === 'crossover' ? 'прямой кабель' : l.label} · компьютеров: ${l.pcs}`;
+        if (wasUp !== null && wasUp !== ok) VPC.balloon(ok ? (l.via === 'wifi' ? 'Беспроводная сеть подключена' : 'Подключение по локальной сети') : 'Сетевой кабель не подключён',
           ok ? `Сеть: ${l.label === 'crossover' ? 'прямой кабель' : l.label}` : 'Проверьте кабель и роутер.');
         wasUp = ok;
       };

@@ -34,7 +34,11 @@ public final class PcSessions {
         /** Игроки рядом, которые видят монитор в мире (получают кадры с пониженной частотой). */
         final Set<UUID> ambient = new HashSet<>();
         int frameBudget, inputBudget;
-        NetTopology.Network net = new NetTopology.Network("", "", List.of(), List.of());
+        NetTopology.Network net = NetTopology.Network.NONE;
+        String via = "";
+        int netPcs;
+        String towersSig = "";
+        boolean card; long target;   // последние известные данные корпуса (чанк ПК может выгрузиться)
     }
 
     private static final Map<GlobalPos, Session> sessions = new HashMap<>();
@@ -145,17 +149,66 @@ public final class PcSessions {
         for (var e : sessions.entrySet()) updateNet(server, e.getKey(), e.getValue(), false);
     }
 
+    /** Комплектующие ПК изменились (например, вынули Wi-Fi-карту). */
+    public static void hardwareChanged(net.minecraft.world.level.Level level, BlockPos pos) {
+        if (level.getServer() == null) return;
+        GlobalPos key = GlobalPos.of(level.dimension(), pos);
+        Session s = sessions.get(key);
+        if (s != null) updateNet(level.getServer(), key, s, true);
+    }
+
+    static void onWifi(PcPayloads.Wifi p, IPayloadContext ctx) {
+        if (!(ctx.player() instanceof ServerPlayer sp)) return;
+        GlobalPos key = GlobalPos.of(sp.level().dimension(), p.pos());
+        Session s = sessions.get(key);
+        if (s == null || !s.host.equals(sp.getUUID())) return;
+        if (!(sp.level().getBlockEntity(p.pos()) instanceof dev.vintagepc.block.RetroPcBlockEntity be)) return;
+        if (p.tower() != 0 && !NetGraph.get(sp.level()).formed(BlockPos.of(p.tower()))) return;
+        be.setWifiTower(p.tower());
+        updateNet(sp.server, key, s, true);
+    }
+
+    /**
+     * Сеть ПК: по кабелю, если он подключён к роутеру/вышке (или кроссовер), иначе — по Wi-Fi,
+     * если стоит карта и выбрана собранная вышка этого измерения.
+     */
     private static void updateNet(net.minecraft.server.MinecraftServer server, GlobalPos key, Session s, boolean force) {
         var level = server.getLevel(key.dimension());
         if (level == null) return;
+        NetGraph g = NetGraph.get(level);
         NetTopology.Network n = NetTopology.explore(level, key.pos());
-        boolean changed = !n.id().equals(s.net.id()) || !n.label().equals(s.net.label()) || n.pcs().size() != s.net.pcs().size();
-        if (!changed && !force) { s.net = n; return; }
+        String via = n.up() ? "cable" : "";
+        var be = level.isLoaded(key.pos()) && level.getBlockEntity(key.pos()) instanceof dev.vintagepc.block.RetroPcBlockEntity b ? b : null;
+        if (be != null) { s.card = be.has(dev.vintagepc.item.PcPart.WIFI); s.target = be.wifiTower(); }
+        boolean card = s.card;
+        long target = s.target;
+        if (!n.up() && card && target != 0 && g.formed(BlockPos.of(target))) {
+            n = NetTopology.explore(level, BlockPos.of(target));
+            via = n.up() ? "wifi" : "";
+        }
+        // ПК в сети: по кабелю + подключённые по воздуху (сессии с тем же id)
+        int pcs = n.pcs().size();
+        if (n.up()) for (var e : sessions.entrySet())
+            if (e.getValue() != s && "wifi".equals(e.getValue().via) && n.id().equals(e.getValue().net.id())) pcs++;
+        if ("wifi".equals(via)) pcs++;
+
+        List<PcPayloads.Tower> towers = new ArrayList<>();
+        if (card) for (long t : g.towers()) {
+            BlockPos tp = BlockPos.of(t);
+            String name = g.name(tp);
+            towers.add(new PcPayloads.Tower(t, name.isEmpty() ? "Wi-Fi " + NetTopology.hex(t).substring(0, 4).toUpperCase(java.util.Locale.ROOT) : name,
+                    (int) Math.sqrt(tp.distSqr(key.pos()))));
+        }
+        String sig = towers.toString() + card + target;
+
+        boolean changed = !n.id().equals(s.net.id()) || !n.label().equals(s.net.label()) || pcs != s.netPcs
+                || !via.equals(s.via) || !sig.equals(s.towersSig);
         String old = s.net.id();
-        s.net = n;
+        s.net = n; s.via = via; s.netPcs = pcs; s.towersSig = sig;
+        if (!changed && !force) return;
         if (!old.equals(n.id()) && !hostsNet(s.host, old)) LanHub.dropNet(s.host, old);
         ServerPlayer host = server.getPlayerList().getPlayer(s.host);
-        if (host != null) send(host, new PcPayloads.NetState(key.pos(), n.id(), n.label(), n.pcs().size()));
+        if (host != null) send(host, new PcPayloads.NetState(key.pos(), n.id(), n.label(), pcs, via, card, target, towers));
     }
 
     /** Время последнего пакета через роутер — для мигания светодиодов. */
@@ -165,7 +218,7 @@ public final class PcSessions {
         if (net == null) return;
         for (var e : sessions.entrySet()) {
             if (!net.equals(e.getValue().net.id())) continue;
-            for (BlockPos r : e.getValue().net.routers()) routerActivity.put(GlobalPos.of(e.getKey().dimension(), r), tick);
+            for (BlockPos r : e.getValue().net.hubs()) routerActivity.put(GlobalPos.of(e.getKey().dimension(), r), tick);
             return;
         }
     }

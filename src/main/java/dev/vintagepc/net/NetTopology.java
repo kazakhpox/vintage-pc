@@ -1,91 +1,96 @@
 package dev.vintagepc.net;
 
 import dev.vintagepc.block.NetworkCableBlock;
-import dev.vintagepc.block.RetroPcBlock;
-import dev.vintagepc.block.RouterBlock;
-import dev.vintagepc.block.RouterBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
 /**
- * Физическая топология сети: обход кабелей от устройства.
+ * Физическая топология сети — обход {@link NetGraph} (работает и через непрогруженные чанки).
  *
- *  - Компьютер — оконечное устройство: через него сеть не проходит (две сетевые карты не мост).
- *  - Роутер объединяет всё подключённое и работает как повторитель.
- *  - Один отрезок кабеля между устройствами — не длиннее {@link NetworkCableBlock#MAX_LENGTH} блоков.
+ *  - Кабель лежит на полу, как редстоун: соединяется с соседним кабелем на той же высоте
+ *    или на блок выше/ниже (подъём и спуск), а с устройствами — с любой стороны.
+ *  - Компьютер — оконечное устройство: через него сеть не проходит.
+ *  - Роутер и вышка Wi-Fi объединяют всё подключённое и работают как повторители.
+ *  - Отрезок кабеля между устройствами — не длиннее {@link NetworkCableBlock#MAX_LENGTH} блоков.
  *  - Без роутера сеть работает только для двух ПК, соединённых напрямую (кроссовер).
  */
 public final class NetTopology {
-    private static final int MAX_WORK = 20_000;
+    private static final int MAX_WORK = 50_000;
 
     /** id — 8 hex-символов ("" — сети нет), label — имя для игрока. */
-    public record Network(String id, String label, List<BlockPos> pcs, List<BlockPos> routers) {
+    public record Network(String id, String label, List<BlockPos> pcs, List<BlockPos> hubs) {
         public boolean up() { return !id.isEmpty(); }
+        public static final Network NONE = new Network("", "", List.of(), List.of());
     }
 
     public static Network explore(Level level, BlockPos start) {
-        Set<BlockPos> pcs = new LinkedHashSet<>(), routers = new LinkedHashSet<>();
+        NetGraph g = NetGraph.get(level);
+        Set<BlockPos> pcs = new LinkedHashSet<>(), hubs = new LinkedHashSet<>();
         Deque<BlockPos> toExpand = new ArrayDeque<>();
-        int[] work = {0};
-        BlockState s0 = level.getBlockState(start);
-        if (s0.getBlock() instanceof RouterBlock) routers.add(start);
-        else if (s0.getBlock() instanceof RetroPcBlock) pcs.add(start);
-        else return new Network("", "", List.of(), List.of());
+        byte t0 = g.type(start);
+        if (t0 == NetGraph.ROUTER || t0 == NetGraph.TOWER) hubs.add(start);
+        else if (t0 == NetGraph.PC) pcs.add(start);
+        else return Network.NONE;
         toExpand.add(start);
+        int work = 0;
 
-        while (!toExpand.isEmpty() && work[0] < MAX_WORK) {
+        while (!toExpand.isEmpty() && work < MAX_WORK) {
             BlockPos dev = toExpand.poll();
-            // обход кабелей от устройства, с ограничением длины
             Map<BlockPos, Integer> dist = new HashMap<>();
             Deque<BlockPos> q = new ArrayDeque<>();
-            for (Direction d : Direction.values()) visit(level, dev.relative(d), 0, dist, q, pcs, routers, toExpand, dev);
-            while (!q.isEmpty() && work[0]++ < MAX_WORK) {
+            for (Direction d : Direction.values()) {
+                BlockPos n = dev.relative(d);
+                byte t = g.type(n);
+                if (t == NetGraph.CABLE) { dist.put(n, 1); q.add(n); }
+                else device(n, t, pcs, hubs, toExpand);
+            }
+            while (!q.isEmpty() && work++ < MAX_WORK) {
                 BlockPos c = q.poll();
                 int dc = dist.get(c);
-                for (Direction d : Direction.values()) visit(level, c.relative(d), dc, dist, q, pcs, routers, toExpand, dev);
+                for (Direction d : Direction.values()) {          // устройства — с любой стороны кабеля
+                    BlockPos n = c.relative(d);
+                    byte t = g.type(n);
+                    if (t != NetGraph.CABLE) { if (!n.equals(dev)) device(n, t, pcs, hubs, toExpand); }
+                }
+                if (dc >= NetworkCableBlock.MAX_LENGTH) continue;   // сигнал затух
+                for (Direction d : Direction.Plane.HORIZONTAL) {    // кабель-кабель: как редстоун
+                    BlockPos side = c.relative(d);
+                    for (BlockPos n : new BlockPos[]{side, side.above(), side.below()}) {
+                        if (g.type(n) != NetGraph.CABLE) continue;
+                        Integer old = dist.get(n);
+                        if (old != null && old <= dc + 1) continue;
+                        dist.put(n, dc + 1);
+                        q.add(n);
+                    }
+                }
             }
         }
 
-        List<BlockPos> pcList = new ArrayList<>(pcs), rList = new ArrayList<>(routers);
+        List<BlockPos> pcList = new ArrayList<>(pcs), hubList = new ArrayList<>(hubs);
         int dim = level.dimension().location().hashCode();
-        if (!rList.isEmpty()) {
-            BlockPos main = Collections.min(rList, Comparator.comparingLong(BlockPos::asLong));
+        if (!hubList.isEmpty()) {
+            BlockPos main = Collections.min(hubList, Comparator.comparingLong(BlockPos::asLong));
             String id = hex(main.asLong() * 31 + dim);
-            String name = level.getBlockEntity(main) instanceof RouterBlockEntity be ? be.name() : "";
-            return new Network(id, name.isEmpty() ? "LAN-" + id.substring(0, 4).toUpperCase(Locale.ROOT) : name, pcList, rList);
+            String name = "";
+            for (BlockPos h : hubList) if (!g.name(h).isEmpty()) { name = g.name(h); break; }
+            return new Network(id, name.isEmpty() ? "LAN-" + id.substring(0, 4).toUpperCase(Locale.ROOT) : name, pcList, hubList);
         }
         if (pcList.size() == 2) {
             BlockPos main = Collections.min(pcList, Comparator.comparingLong(BlockPos::asLong));
-            return new Network(hex(main.asLong() * 17 + dim), "crossover", pcList, rList);
+            return new Network(hex(main.asLong() * 17 + dim), "crossover", pcList, hubList);
         }
-        return new Network("", "", pcList, rList);
+        return new Network("", "", pcList, hubList);
     }
 
-    private static void visit(Level level, BlockPos p, int fromDist, Map<BlockPos, Integer> dist, Deque<BlockPos> q,
-                              Set<BlockPos> pcs, Set<BlockPos> routers, Deque<BlockPos> toExpand, BlockPos source) {
-        if (p.equals(source) || !level.isLoaded(p)) return;
-        BlockState s = level.getBlockState(p);
-        if (s.getBlock() instanceof NetworkCableBlock) {
-            int d = fromDist + 1;
-            if (d > NetworkCableBlock.MAX_LENGTH) return;             // сигнал затух
-            Integer old = dist.get(p);
-            if (old != null && old <= d) return;
-            dist.put(p, d);
-            q.add(p);
-        } else if (s.getBlock() instanceof RouterBlock) {
-            if (routers.add(p.immutable())) toExpand.add(p.immutable());
-        } else if (s.getBlock() instanceof RetroPcBlock) {
-            pcs.add(p.immutable());                                    // ПК — оконечное устройство
-        }
+    private static void device(BlockPos n, byte t, Set<BlockPos> pcs, Set<BlockPos> hubs, Deque<BlockPos> toExpand) {
+        if (t == NetGraph.ROUTER || t == NetGraph.TOWER) { if (hubs.add(n.immutable())) toExpand.add(n.immutable()); }
+        else if (t == NetGraph.PC) pcs.add(n.immutable());
     }
 
-    private static String hex(long v) {
-        return String.format("%08x", (int) (v ^ (v >>> 32)));
-    }
+    static String hex(long v) { return String.format("%08x", (int) (v ^ (v >>> 32))); }
 
     private NetTopology() {}
 }

@@ -1,5 +1,6 @@
 package dev.vintagepc.block;
 
+import dev.vintagepc.net.NetGraph;
 import dev.vintagepc.net.NetTopology;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -59,13 +60,25 @@ public class RouterBlock extends Block implements EntityBlock {
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
         Component name = stack.get(DataComponents.CUSTOM_NAME);
         if (name != null && level.getBlockEntity(pos) instanceof RouterBlockEntity be) be.setName(name.getString());
+        if (name != null && !level.isClientSide) NetGraph.get(level).setName(pos, name.getString());
+    }
+
+    @Override
+    protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState old, boolean moving) {
+        if (!level.isClientSide && !old.is(this)) NetGraph.get(level).put(pos, NetGraph.ROUTER);
+    }
+
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moving) {
+        if (!level.isClientSide && !newState.is(this)) NetGraph.get(level).remove(pos);
+        super.onRemove(state, level, pos, newState, moving);
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (player instanceof ServerPlayer sp) {
             NetTopology.Network n = NetTopology.explore(level, pos);
-            sp.displayClientMessage(Component.translatable("vintagepc.router_info", n.label(), n.pcs().size(), n.routers().size()), true);
+            sp.displayClientMessage(Component.translatable("vintagepc.router_info", n.label(), n.pcs().size(), n.hubs().size()), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

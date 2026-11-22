@@ -1,0 +1,27 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "category": "redstone",
+ "pattern": [
+  "RGR",
+  "CIC",
+  "RGR"
+ ],
+ "key": {
+  "R": {
+   "item": "minecraft:redstone"
+  },
+  "G": {
+   "item": "minecraft:gold_nugget"
+  },
+  "C": {
+   "item": "minecraft:copper_ingot"
+  },
+  "I": {
+   "item": "minecraft:green_dye"
+  }
+ },
+ "result": {
+  "id": "vintagepc:motherboard",
+  "count": 1
+ }
+}

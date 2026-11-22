@@ -1,0 +1,10 @@
+{
+ "variants": {
+  "formed=false": {
+   "model": "vintagepc:block/wifi_tower_base"
+  },
+  "formed=true": {
+   "model": "vintagepc:block/wifi_tower_base_on"
+  }
+ }
+}

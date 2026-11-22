@@ -1,0 +1,9 @@
+{
+ "parent": "minecraft:block/redstone_dust_side_alt0",
+ "render_type": "minecraft:cutout",
+ "textures": {
+  "particle": "vintagepc:block/cable_dot",
+  "overlay": "vintagepc:block/cable_overlay",
+  "line": "vintagepc:block/cable_line0"
+ }
+}

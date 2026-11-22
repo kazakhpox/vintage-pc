@@ -35,12 +35,36 @@ public final class PcPayloads {
      * Сервер → хост: к какой сети физически подключён ПК (обход кабелей). net = "" — кабель не подключён
      * или сеть неисправна; label — имя роутера / "crossover"; pcs — сколько компьютеров в сегменте.
      */
-    public record NetState(BlockPos pos, String net, String label, int pcs) implements CustomPacketPayload {
+    public record NetState(BlockPos pos, String net, String label, int pcs, String via, boolean wifiCard,
+                           long wifiTarget, java.util.List<Tower> towers) implements CustomPacketPayload {
         public static final Type<NetState> TYPE = new Type<>(VintagePC.id("pc_net"));
         public static final StreamCodec<FriendlyByteBuf, NetState> CODEC = StreamCodec.of(
-                (b, p) -> { b.writeBlockPos(p.pos); b.writeUtf(p.net, 8); b.writeUtf(p.label, 40); b.writeVarInt(p.pcs); },
-                b -> new NetState(b.readBlockPos(), b.readUtf(8), b.readUtf(40), b.readVarInt()));
+                (b, p) -> {
+                    b.writeBlockPos(p.pos); b.writeUtf(p.net, 8); b.writeUtf(p.label, 40); b.writeVarInt(p.pcs);
+                    b.writeUtf(p.via, 8); b.writeBoolean(p.wifiCard); b.writeLong(p.wifiTarget);
+                    b.writeVarInt(p.towers.size());
+                    for (Tower t : p.towers) { b.writeLong(t.pos); b.writeUtf(t.name, 40); b.writeVarInt(t.distance); }
+                },
+                b -> {
+                    BlockPos pos = b.readBlockPos(); String net = b.readUtf(8), label = b.readUtf(40); int pcs = b.readVarInt();
+                    String via = b.readUtf(8); boolean card = b.readBoolean(); long target = b.readLong();
+                    int n = Math.min(b.readVarInt(), 64);
+                    java.util.List<Tower> ts = new java.util.ArrayList<>();
+                    for (int i = 0; i < n; i++) ts.add(new Tower(b.readLong(), b.readUtf(40), b.readVarInt()));
+                    return new NetState(pos, net, label, pcs, via, card, target, ts);
+                });
         @Override public Type<NetState> type() { return TYPE; }
+    }
+
+    /** Беспроводная сеть (собранная вышка) в списке доступных. */
+    public record Tower(long pos, String name, int distance) {}
+
+    /** Клиент → сервер: подключить ПК к вышке Wi-Fi (tower = asLong основания) или отключить (0). */
+    public record Wifi(BlockPos pos, long tower) implements CustomPacketPayload {
+        public static final Type<Wifi> TYPE = new Type<>(VintagePC.id("pc_wifi"));
+        public static final StreamCodec<FriendlyByteBuf, Wifi> CODEC = StreamCodec.of(
+                (b, p) -> { b.writeBlockPos(p.pos); b.writeLong(p.tower); }, b -> new Wifi(b.readBlockPos(), b.readLong()));
+        @Override public Type<Wifi> type() { return TYPE; }
     }
 
     /** Клиент → сервер: хост выключил ПК (или у него нет MCEF) / зритель отошёл от экрана. */

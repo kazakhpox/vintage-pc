@@ -5,6 +5,12 @@ import dev.vintagepc.block.RetroPcBlockEntity;
 import dev.vintagepc.block.NetworkCableBlock;
 import dev.vintagepc.block.RouterBlock;
 import dev.vintagepc.block.RouterBlockEntity;
+import dev.vintagepc.block.WifiTowerBaseBlock;
+import dev.vintagepc.block.WifiTowerBlockEntity;
+import dev.vintagepc.block.WifiTowerPartBlock;
+import dev.vintagepc.item.PcPart;
+import dev.vintagepc.item.PcPartItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -47,10 +53,31 @@ public final class VintagePC {
                     .lightLevel(s -> s.getValue(RouterBlock.ACTIVE) ? 4 : 1));
     public static final DeferredItem<BlockItem> ROUTER_ITEM = ITEMS.registerSimpleBlockItem(ROUTER);
 
+    public static final DeferredBlock<WifiTowerBaseBlock> WIFI_TOWER_BASE = BLOCKS.registerBlock("wifi_tower_base", WifiTowerBaseBlock::new,
+            BlockBehaviour.Properties.of().strength(3f).sound(SoundType.METAL)
+                    .lightLevel(s -> s.getValue(WifiTowerBaseBlock.FORMED) ? 6 : 0));
+    public static final DeferredItem<BlockItem> WIFI_TOWER_BASE_ITEM = ITEMS.registerSimpleBlockItem(WIFI_TOWER_BASE);
+    public static final DeferredBlock<WifiTowerPartBlock> WIFI_MAST = BLOCKS.registerBlock("wifi_mast", p -> new WifiTowerPartBlock(p, false),
+            BlockBehaviour.Properties.of().strength(2f).sound(SoundType.METAL).noOcclusion());
+    public static final DeferredItem<BlockItem> WIFI_MAST_ITEM = ITEMS.registerSimpleBlockItem(WIFI_MAST);
+    public static final DeferredBlock<WifiTowerPartBlock> WIFI_ANTENNA = BLOCKS.registerBlock("wifi_antenna", p -> new WifiTowerPartBlock(p, true),
+            BlockBehaviour.Properties.of().strength(2f).sound(SoundType.METAL).noOcclusion().lightLevel(s -> 7));
+    public static final DeferredItem<BlockItem> WIFI_ANTENNA_ITEM = ITEMS.registerSimpleBlockItem(WIFI_ANTENNA);
+
+    /** Комплектующие ПК. */
+    public static final java.util.Map<PcPart, DeferredItem<PcPartItem>> PART_ITEMS = new java.util.EnumMap<>(PcPart.class);
+    static {
+        for (PcPart part : PcPart.values())
+            PART_ITEMS.put(part, ITEMS.registerItem(part.id, p -> new PcPartItem(part, p), new Item.Properties().stacksTo(16)));
+    }
+
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
     @SuppressWarnings("DataFlowIssue")
     public static final Supplier<BlockEntityType<RetroPcBlockEntity>> RETRO_PC_BE = BLOCK_ENTITIES.register("retro_pc",
             () -> BlockEntityType.Builder.of(RetroPcBlockEntity::new, RETRO_PC.get()).build(null));
+    @SuppressWarnings("DataFlowIssue")
+    public static final Supplier<BlockEntityType<WifiTowerBlockEntity>> WIFI_TOWER_BE = BLOCK_ENTITIES.register("wifi_tower",
+            () -> BlockEntityType.Builder.of(WifiTowerBlockEntity::new, WIFI_TOWER_BASE.get()).build(null));
     @SuppressWarnings("DataFlowIssue")
     public static final Supplier<BlockEntityType<RouterBlockEntity>> ROUTER_BE = BLOCK_ENTITIES.register("router",
             () -> BlockEntityType.Builder.of(RouterBlockEntity::new, ROUTER.get()).build(null));
@@ -69,7 +96,11 @@ public final class VintagePC {
                 e.accept(RETRO_PC_ITEM);
                 e.accept(ROUTER_ITEM);
                 e.accept(NETWORK_CABLE_ITEM);
+                e.accept(WIFI_TOWER_BASE_ITEM);
+                e.accept(WIFI_MAST_ITEM);
+                e.accept(WIFI_ANTENNA_ITEM);
             }
+            if (e.getTabKey() == CreativeModeTabs.INGREDIENTS) PART_ITEMS.values().forEach(e::accept);
         });
         LanHub.init(NeoForge.EVENT_BUS);
         PcSessions.init(NeoForge.EVENT_BUS);

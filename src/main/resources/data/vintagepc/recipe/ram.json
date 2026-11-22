@@ -1,0 +1,24 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "category": "redstone",
+ "pattern": [
+  "   ",
+  "QQQ",
+  "GRG"
+ ],
+ "key": {
+  "Q": {
+   "item": "minecraft:quartz"
+  },
+  "G": {
+   "item": "minecraft:gold_nugget"
+  },
+  "R": {
+   "item": "minecraft:redstone"
+  }
+ },
+ "result": {
+  "id": "vintagepc:ram",
+  "count": 1
+ }
+}

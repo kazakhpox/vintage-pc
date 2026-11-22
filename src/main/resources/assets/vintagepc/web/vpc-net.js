@@ -14,7 +14,7 @@
 (function () {
   const enc = new TextEncoder(), dec = new TextDecoder();
   const subs = new Map(), status = new Set(), linkFns = new Set();
-  let ws = null, player = 'offline', online = false, link = { up: false, label: '', pcs: 0 };
+  let ws = null, player = 'offline', online = false, link = { up: false, label: '', pcs: 0, via: '', wifi: { card: false, target: '', towers: [] } };
   const q = new URLSearchParams(location.search);
 
   function connect() {
@@ -24,7 +24,7 @@
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
-        if (m.op === 'link') { link = { up: m.up, label: m.label, pcs: m.pcs }; linkFns.forEach(f => f(link)); return; }
+        if (m.op === 'link') { link = { up: m.up, label: m.label, pcs: m.pcs, via: m.via, wifi: m.wifi }; linkFns.forEach(f => f(link)); return; }
         if (m.player) player = m.player;
         if ('online' in m) online = m.online;
         if ('value' in m) online = m.value;
@@ -60,7 +60,7 @@
     pc: q.get('pc') || 'pc',
     net: q.get('net'),
     onStatus(f) { status.add(f); f({ player, online }); },
-    /** Физическое подключение ПК: { up, label (имя роутера или "crossover"), pcs }. */
+    /** Физическое подключение ПК: { up, label (имя роутера / "crossover"), pcs, via: "cable"|"wifi"|"", wifi: {card, target, towers} }. */
     get link() { return link; },
     onLink(f) { linkFns.add(f); f(link); return () => linkFns.delete(f); },
 
@@ -85,6 +85,8 @@
       ws.send(out);
       return true;
     },
+    /** Подключиться к вышке Wi-Fi (id из link.wifi.towers) или отключиться (''). */
+    wifiConnect(id) { api.control({ op: 'wifi', tower: id || '' }); },
     control(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); },
 
     room(name) {

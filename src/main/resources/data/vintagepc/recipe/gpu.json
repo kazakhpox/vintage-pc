@@ -1,0 +1,30 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "category": "redstone",
+ "pattern": [
+  "III",
+  "QDQ",
+  "GRG"
+ ],
+ "key": {
+  "I": {
+   "item": "minecraft:iron_ingot"
+  },
+  "Q": {
+   "item": "minecraft:quartz"
+  },
+  "D": {
+   "item": "minecraft:diamond"
+  },
+  "G": {
+   "item": "minecraft:gold_nugget"
+  },
+  "R": {
+   "item": "minecraft:redstone"
+  }
+ },
+ "result": {
+  "id": "vintagepc:gpu",
+  "count": 1
+ }
+}

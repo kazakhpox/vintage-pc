@@ -1,0 +1,8 @@
+{
+ "parent": "minecraft:block/cube_bottom_top",
+ "textures": {
+  "side": "vintagepc:block/wifi_tower_base_on",
+  "top": "vintagepc:block/wifi_tower_top",
+  "bottom": "vintagepc:block/wifi_tower_top"
+ }
+}

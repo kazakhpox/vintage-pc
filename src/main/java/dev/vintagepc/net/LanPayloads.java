@@ -67,6 +67,7 @@ public final class LanPayloads {
 
         // Совместный экран (hotseat)
         r.playToServer(PcPayloads.Leave.TYPE, PcPayloads.Leave.CODEC, PcSessions::onLeave);
+        r.playToServer(PcPayloads.Wifi.TYPE, PcPayloads.Wifi.CODEC, PcSessions::onWifi);
         r.playToServer(PcPayloads.Control.TYPE, PcPayloads.Control.CODEC, PcSessions::onControl);
         // Кадры и ввод ходят в обе стороны (хост → сервер → зрители, зритель → сервер → хост)
         r.playBidirectional(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, new DirectionalPayloadHandler<>(

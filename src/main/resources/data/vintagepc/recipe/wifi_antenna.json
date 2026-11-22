@@ -1,0 +1,24 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "category": "redstone",
+ "pattern": [
+  " E ",
+  "CLC",
+  " C "
+ ],
+ "key": {
+  "E": {
+   "item": "minecraft:ender_eye"
+  },
+  "C": {
+   "item": "minecraft:copper_ingot"
+  },
+  "L": {
+   "item": "minecraft:lightning_rod"
+  }
+ },
+ "result": {
+  "id": "vintagepc:wifi_antenna",
+  "count": 1
+ }
+}
