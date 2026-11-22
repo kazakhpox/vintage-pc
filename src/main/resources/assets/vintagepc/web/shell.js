@@ -122,5 +122,21 @@
       VPCNet.onStatus(net); VPCNet.onLink(net);
     },
   };
+  /*
+   * MCEF отправляет каждое нажатие мыши с clickCount = 1, поэтому Chromium никогда не генерирует dblclick.
+   * Распознаём двойной щелчок сами: два клика в одно место за 450 мс → событие dblclick.
+   * Если среда когда-нибудь начнёт присылать настоящий dblclick — отключаемся, чтобы не было двойных срабатываний.
+   */
+  let last = null, nativeDbl = false;
+  document.addEventListener('dblclick', (e) => { if (e.isTrusted) nativeDbl = true; }, true);
+  document.addEventListener('click', (e) => {
+    if (nativeDbl || e.button !== 0) return;
+    const now = performance.now();
+    if (last && now - last.t < 450 && Math.abs(e.clientX - last.x) < 6 && Math.abs(e.clientY - last.y) < 6 && last.target === e.target) {
+      last = null;
+      e.target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, view: window }));
+    } else last = { t: now, x: e.clientX, y: e.clientY, target: e.target };
+  }, true);
+
   window.VPC = VPC;
 })();

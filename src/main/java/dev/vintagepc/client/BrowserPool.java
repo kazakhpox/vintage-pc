@@ -34,6 +34,27 @@ final class BrowserPool {
 
     static MCEFBrowser peek(BlockPos pos) { return browsers.get(pos); }
 
+    /**
+     * Стандартный обработчик MCEF при любой смене курсора на странице вызывает glfwSetInputMode(NORMAL) —
+     * браузер ПК живёт и после выхода из-за компьютера, и курсор «вылезал» прямо в игре.
+     * Меняем курсор, только пока игрок сидит за этим ПК.
+     */
+    static void guardCursor(BlockPos pos, MCEFBrowser b) {
+        b.setCursorChangeListener(type -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+            var mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.screen instanceof PcScreen ps && ps.pos().equals(pos)) b.setCursor(org.cef.misc.CefCursorType.fromId(type));
+        }));
+    }
+
+    /** Обычный курсор и захват мыши игрой после выхода из-за ПК. */
+    static void resetCursor() {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        mc.execute(() -> {
+            org.lwjgl.glfw.GLFW.glfwSetCursor(mc.getWindow().getWindow(), 0L);
+            if (mc.screen == null) mc.mouseHandler.grabMouse();
+        });
+    }
+
     static void resize(BlockPos pos, MCEFBrowser b, int w, int h) {
         int[] old = sizes.get(pos);
         if (old != null && old[0] == w && old[1] == h) return;

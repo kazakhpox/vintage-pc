@@ -44,11 +44,31 @@ final class PcCamera {
     static boolean active() { return cam != null; }
     static boolean settled() { return cam != null && dir == 0; }
 
-    /** Дистанция от экрана, при которой он занимает ~80% высоты окна и влезает по ширине. */
+    private static double lastDistance = 0.6;
+
+    /**
+     * Дистанция от экрана, при которой он занимает ~80% высоты окна и влезает по ширине.
+     * Свёрнутое окно имеет размер 0×0 — тогда берём последнее нормальное значение
+     * (иначе деление на ноль уводило камеру в бесконечность и экран переставал откликаться).
+     */
     private static double distance() {
         var w = Minecraft.getInstance().getWindow();
-        double tan = Math.tan(Math.toRadians(FOV / 2)), aspect = (double) w.getWidth() / Math.max(1, w.getHeight());
-        return Math.max(SCREEN_H / (2 * 0.80 * tan), SCREEN_W / (2 * 0.92 * tan * aspect));
+        if (w.getWidth() <= 0 || w.getHeight() <= 0) return lastDistance;
+        double tan = Math.tan(Math.toRadians(FOV / 2)), aspect = (double) w.getWidth() / w.getHeight();
+        double d = Math.max(SCREEN_H / (2 * 0.80 * tan), SCREEN_W / (2 * 0.92 * tan * aspect));
+        if (Double.isFinite(d) && d > 0) lastDistance = d;
+        return lastDistance;
+    }
+
+    /** Окно изменило размер: сразу переставить камеру на новую дистанцию, без повторного «подлёта». */
+    static void retarget() {
+        if (cam == null || pos == null || dir != 0) return;
+        Minecraft mc = Minecraft.getInstance();
+        var state = mc.level == null ? null : mc.level.getBlockState(pos);
+        Direction facing = state != null && state.getBlock() instanceof RetroPcBlock ? state.getValue(RetroPcBlock.FACING) : Direction.NORTH;
+        Vec3 screen = Vec3.atBottomCenterOf(pos).add(0, CENTER_Y, 0).add(Vec3.atLowerCornerOf(facing.getNormal()).scale(0.5 + 0.002));
+        toP = screen.add(Vec3.atLowerCornerOf(facing.getNormal()).scale(distance()));
+        place(toP, toYaw, toPitch, true);
     }
 
     /** Прямоугольник экрана в GUI-координатах: {x, y, w, h}. */

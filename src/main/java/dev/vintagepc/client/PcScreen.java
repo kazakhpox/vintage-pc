@@ -30,9 +30,12 @@ final class PcScreen extends Screen implements PcScreenMarker {
 
     @Override
     protected void init() {
-        if (!closing) PcCamera.enter(pos);
+        // init() вызывается и при каждом изменении размера окна (сворачивание/разворачивание):
+        // подлетаем только один раз, дальше лишь переставляем камеру
+        if (!closing) { if (!PcCamera.active() || !pos.equals(PcCamera.pos())) PcCamera.enter(pos); else PcCamera.retarget(); }
         if (!BrowserPool.ready()) return;
         if (browser == null) browser = BrowserPool.get(pos, url);
+        BrowserPool.guardCursor(pos, browser);
         resizeBrowser();
         browser.setFocus(true);
     }
@@ -54,8 +57,8 @@ final class PcScreen extends Screen implements PcScreenMarker {
         if (w > 100 && h > 75) BrowserPool.resize(pos, browser, w, h);
     }
 
-    private int bx(double x) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null ? 0 : (int) ((x - r[0]) / r[2] * s[0]); }
-    private int by(double y) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null ? 0 : (int) ((y - r[1]) / r[3] * s[1]); }
+    private int bx(double x) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null || !(r[2] > 0) ? 0 : (int) ((x - r[0]) / r[2] * s[0]); }
+    private int by(double y) { double[] r = rect(); int[] s = BrowserPool.size(pos); return s == null || !(r[3] > 0) ? 0 : (int) ((y - r[1]) / r[3] * s[1]); }
     private boolean locked() { return browser == null || closing || !PcCamera.settled() || !PcClient.controllerOf(pos).isEmpty(); }
 
     @Override
@@ -138,5 +141,6 @@ final class PcScreen extends Screen implements PcScreenMarker {
     public void removed() {
         if (browser != null) browser.setFocus(false); // браузер не закрываем — ПК остаётся включённым
         PcCamera.cancel();                              // закрыли не через Shift+Esc (урон и т.п.) — сразу вернуть камеру
+        BrowserPool.resetCursor();                      // вернуть обычный курсор и захват мыши игрой
     }
 }

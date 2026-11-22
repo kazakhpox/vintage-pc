@@ -36,7 +36,7 @@ final class ViewerScreen extends Screen implements PcScreenMarker {
     }
 
     @Override
-    protected void init() { if (!closing) PcCamera.enter(pos); }
+    protected void init() { if (!closing) { if (!PcCamera.active() || !pos.equals(PcCamera.pos())) PcCamera.enter(pos); else PcCamera.retarget(); } }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
