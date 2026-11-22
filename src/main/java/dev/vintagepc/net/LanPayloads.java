@@ -5,6 +5,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.DirectionalPayloadHandler;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
@@ -57,13 +58,15 @@ public final class LanPayloads {
         // Совместный экран (hotseat)
         r.playToServer(PcPayloads.Leave.TYPE, PcPayloads.Leave.CODEC, PcSessions::onLeave);
         r.playToServer(PcPayloads.Control.TYPE, PcPayloads.Control.CODEC, PcSessions::onControl);
-        r.playToServer(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, PcSessions::onFrame);
-        r.playToServer(PcPayloads.Input.TYPE, PcPayloads.Input.CODEC, PcSessions::onInput);
+        // Кадры и ввод ходят в обе стороны (хост → сервер → зрители, зритель → сервер → хост)
+        r.playBidirectional(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, new DirectionalPayloadHandler<>(
+                (p, ctx) -> dev.vintagepc.client.PcClient.onFrame(p), PcSessions::onFrame));
+        r.playBidirectional(PcPayloads.Input.TYPE, PcPayloads.Input.CODEC, new DirectionalPayloadHandler<>(
+                (p, ctx) -> dev.vintagepc.client.PcClient.onInput(p), PcSessions::onInput));
         r.playToClient(PcPayloads.Open.TYPE, PcPayloads.Open.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onOpen(p));
         r.playToClient(PcPayloads.Closed.TYPE, PcPayloads.Closed.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onClosed(p));
         r.playToClient(PcPayloads.State.TYPE, PcPayloads.State.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onState(p));
-        r.playToClient(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onFrame(p));
-        r.playToClient(PcPayloads.Input.TYPE, PcPayloads.Input.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onInput(p));
+
     }
 
     private LanPayloads() {}
