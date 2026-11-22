@@ -37,10 +37,11 @@ public final class MonitorRenderer implements BlockEntityRenderer<RetroPcBlockEn
         VertexConsumer vc = buffers.getBuffer(RenderType.text(tex));
         int full = LightTexture.FULL_BRIGHT;
         // Лицевая грань — север (z = 0); смотрящему снаружи «лево» экрана — это +x.
+        // Обход против часовой стрелки, если смотреть снаружи на лицевую грань (иначе грань отсекается).
         vc.addVertex(m, 1 - X0, Y_TOP, Z).setColor(255, 255, 255, 255).setUv(0, 0).setLight(full);
-        vc.addVertex(m, 1 - X1, Y_TOP, Z).setColor(255, 255, 255, 255).setUv(1, 0).setLight(full);
-        vc.addVertex(m, 1 - X1, Y_BOTTOM, Z).setColor(255, 255, 255, 255).setUv(1, 1).setLight(full);
         vc.addVertex(m, 1 - X0, Y_BOTTOM, Z).setColor(255, 255, 255, 255).setUv(0, 1).setLight(full);
+        vc.addVertex(m, 1 - X1, Y_BOTTOM, Z).setColor(255, 255, 255, 255).setUv(1, 1).setLight(full);
+        vc.addVertex(m, 1 - X1, Y_TOP, Z).setColor(255, 255, 255, 255).setUv(1, 0).setLight(full);
         pose.popPose();
     }
 }
