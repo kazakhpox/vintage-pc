@@ -4,33 +4,53 @@ import com.cinemamod.mcef.MCEF;
 import com.cinemamod.mcef.MCEFBrowser;
 import net.minecraft.core.BlockPos;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Браузер на каждый компьютер живёт, пока игрок на сервере: закрыл экран — игра/музыка
- * в Winamp продолжает работать, вернулся к ПК — всё на месте (как не выключенный компьютер).
+ * Браузер на каждый включённый компьютер живёт, пока игрок на сервере: закрыл экран — игра
+ * и музыка продолжают работать (и транслироваться зрителям), вернулся — всё на месте.
  */
 final class BrowserPool {
     private static final int MAX_BROWSERS = 4;
     private static final Map<BlockPos, MCEFBrowser> browsers = new LinkedHashMap<>();
+    private static final Map<BlockPos, int[]> sizes = new HashMap<>();
 
     static MCEFBrowser get(BlockPos pos, String url) {
         MCEFBrowser b = browsers.get(pos);
         if (b != null) return b;
-        if (browsers.size() >= MAX_BROWSERS) { // выключаем самый старый «компьютер»
-            var it = browsers.entrySet().iterator();
-            it.next().getValue().close();
-            it.remove();
+        if (browsers.size() >= MAX_BROWSERS) { // выключаем самый старый компьютер
+            BlockPos oldest = browsers.keySet().iterator().next();
+            PcClient.shutdown(oldest);
+            close(oldest);
         }
         b = MCEF.createBrowser(url, false);
         browsers.put(pos, b);
         return b;
     }
 
+    static MCEFBrowser peek(BlockPos pos) { return browsers.get(pos); }
+
+    static void resize(BlockPos pos, MCEFBrowser b, int w, int h) {
+        int[] old = sizes.get(pos);
+        if (old != null && old[0] == w && old[1] == h) return;
+        b.resize(w, h);
+        sizes.put(pos, new int[]{w, h});
+    }
+
+    static int[] size(BlockPos pos) { return sizes.get(pos); }
+
+    static void close(BlockPos pos) {
+        MCEFBrowser b = browsers.remove(pos);
+        sizes.remove(pos);
+        if (b != null) b.close();
+    }
+
     static void closeAll() {
         browsers.values().forEach(MCEFBrowser::close);
         browsers.clear();
+        sizes.clear();
     }
 
     static boolean ready() { return MCEF.isInitialized(); }

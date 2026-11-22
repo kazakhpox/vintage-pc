@@ -1,5 +1,11 @@
 {
   "block.vintagepc.retro_pc": "Retro PC",
   "vintagepc.no_mcef": "Vintage PC needs MCEF (Chromium) installed on the client.",
-  "vintagepc.booting": "Booting... (Shift+Esc to leave)"
+  "vintagepc.booting": "Booting... (Shift+Esc to leave)",
+  "vintagepc.hurt_close": "You were hurt — stepped away from the PC",
+  "vintagepc.host_status": "Viewers: %s · F8 — take control back",
+  "vintagepc.host_locked": "%s is controlling · F8 — take control back",
+  "vintagepc.viewer_wait": "Waiting for %s's screen...",
+  "vintagepc.viewer_watch": "Watching %s's PC · controlling: %s · F8 — take control · Shift+Esc — leave",
+  "vintagepc.viewer_control": "You control %s's PC · F8 — give back · Shift+Esc — leave"
 }

@@ -1,5 +1,11 @@
 {
   "block.vintagepc.retro_pc": "Ретро-компьютер",
   "vintagepc.no_mcef": "Для Vintage PC на клиенте нужен мод MCEF (Chromium).",
-  "vintagepc.booting": "Загрузка... (Shift+Esc — выйти)"
+  "vintagepc.booting": "Загрузка... (Shift+Esc — выйти)",
+  "vintagepc.hurt_close": "Вас атакуют — вы отошли от компьютера",
+  "vintagepc.host_status": "Зрителей: %s · F8 — вернуть управление",
+  "vintagepc.host_locked": "Управляет %s · F8 — забрать управление",
+  "vintagepc.viewer_wait": "Ждём изображение с ПК %s...",
+  "vintagepc.viewer_watch": "ПК игрока %s · управляет: %s · F8 — взять управление · Shift+Esc — выйти",
+  "vintagepc.viewer_control": "Вы управляете ПК игрока %s · F8 — отдать · Shift+Esc — выйти"
 }

@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Клиентский мост виртуальной LAN.
  *
- *   JS в MCEF ⇄ ws://127.0.0.1:PORT (MiniWebSocketServer) ⇄ LanBridge ⇄ пакеты MC ⇄ LanHub на сервере
+ *   JS в MCEF ⇄ ws://127.0.0.1:PORT/lan (LocalHttpServer) ⇄ LanBridge ⇄ пакеты MC ⇄ LanHub на сервере
  *
  * Протокол WebSocket:
  *   текст  JS→Java : {"op":"join","ch":"eth:home"} | {"op":"leave","ch":"..."}
@@ -27,27 +27,35 @@ import java.util.concurrent.ConcurrentHashMap;
  * и видят друг друга локально — как два ПК в одном свитче.
  */
 public final class LanBridge {
-    private static final Set<MiniWebSocketServer.Conn> conns = ConcurrentHashMap.newKeySet();
+    private static final Set<LocalHttpServer.Conn> conns = ConcurrentHashMap.newKeySet();
     private static final Map<String, Integer> refs = new HashMap<>();
-    private static MiniWebSocketServer server;
+    private static LocalHttpServer server;
     private static String token;
     private static volatile boolean online;
 
-    /** Запускает мост (лениво) и возвращает строку параметров для URL оболочки. */
-    public static synchronized String urlParams() {
+    /** Корень данных игрока: .minecraft/vintagepc/ (cartridges/, engines/, music/, cache/). */
+    public static java.nio.file.Path dataRoot() {
+        return net.neoforged.fml.loading.FMLPaths.GAMEDIR.get().resolve("vintagepc");
+    }
+
+    /** Запускает локальный сервер (лениво) и возвращает URL оболочки для конкретного ПК. */
+    public static synchronized String shellUrl(String pcKey) {
         if (server == null) {
             byte[] r = new byte[16];
             new SecureRandom().nextBytes(r);
             token = HexFormat.of().formatHex(r);
             try {
-                server = new MiniWebSocketServer(token, new Handler());
+                java.nio.file.Path root = dataRoot();
+                for (String d : new String[]{"cartridges", "engines", "music", "cache"})
+                    java.nio.file.Files.createDirectories(root.resolve(d));
+                server = new LocalHttpServer(token, new WebRoutes(root), new Handler());
             } catch (Exception e) {
-                VintagePC.LOG.error("Не удалось запустить LAN-мост", e);
-                return "";
+                VintagePC.LOG.error("Не удалось запустить локальный сервер Vintage PC", e);
+                return "about:blank";
             }
-            VintagePC.LOG.info("Vintage PC LAN bridge on 127.0.0.1:{}", server.port());
+            VintagePC.LOG.info("Vintage PC local server on {}", server.origin());
         }
-        return "ws=" + server.port() + "&token=" + token;
+        return server.origin() + "/?t=" + token + "&pc=" + pcKey;
     }
 
     // ---------- события подключения к серверу MC ----------
@@ -72,25 +80,31 @@ public final class LanBridge {
 
     // ---------- WebSocket ----------
 
-    private static final class Handler implements MiniWebSocketServer.Handler {
-        @Override public void onOpen(MiniWebSocketServer.Conn c) {
+    private static final class Handler implements LocalHttpServer.WsHandler {
+        @Override public void onOpen(LocalHttpServer.Conn c) {
+            if (!c.path.equals("/lan")) { c.close(); return; }
             c.attrs.put("subs", ConcurrentHashMap.newKeySet());
             conns.add(c);
             c.sendText("{\"op\":\"hello\",\"player\":" + jsonStr(playerName()) + ",\"online\":" + online + "}");
         }
 
-        @Override public void onText(MiniWebSocketServer.Conn c, String text) {
+        @Override public void onText(LocalHttpServer.Conn c, String text) {
             JsonObject o;
             try { o = JsonParser.parseString(text).getAsJsonObject(); } catch (Exception e) { return; }
             String op = o.has("op") ? o.get("op").getAsString() : "";
             String ch = o.has("ch") ? o.get("ch").getAsString() : "";
+            if (op.equals("shutdown") && o.has("pc")) { // «Пуск → Завершение работы»
+                net.minecraft.core.BlockPos pos = PcClient.fromKey(o.get("pc").getAsString());
+                if (pos != null) Minecraft.getInstance().execute(() -> PcClient.shutdown(pos));
+                return;
+            }
             if (!LanPayloads.validChannel(ch)) return;
             Set<String> subs = subs(c);
             if (op.equals("join") && subs.size() < 16 && subs.add(ch)) ref(ch, +1);
             else if (op.equals("leave") && subs.remove(ch)) ref(ch, -1);
         }
 
-        @Override public void onBinary(MiniWebSocketServer.Conn c, byte[] msg) {
+        @Override public void onBinary(LocalHttpServer.Conn c, byte[] msg) {
             if (msg.length < 2) return;
             int n = msg[0] & 0xFF;
             if (msg.length < 1 + n) return;
@@ -104,14 +118,14 @@ public final class LanBridge {
             if (online) sendToServer(new LanPayloads.SendC2S(ch, data));
         }
 
-        @Override public void onClose(MiniWebSocketServer.Conn c) {
+        @Override public void onClose(LocalHttpServer.Conn c) {
             conns.remove(c);
             for (String ch : subs(c)) ref(ch, -1);
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static Set<String> subs(MiniWebSocketServer.Conn c) {
+    private static Set<String> subs(LocalHttpServer.Conn c) {
         return (Set<String>) c.attrs.getOrDefault("subs", Set.of());
     }
 

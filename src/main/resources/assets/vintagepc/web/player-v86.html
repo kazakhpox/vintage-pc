@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>v86</title>
+<link rel="stylesheet" href="/web/player.css">
+<style>#screen{display:flex;align-items:center;justify-content:center}#screen canvas{image-rendering:pixelated;max-width:100%;max-height:100%}#screen>div{white-space:pre;font:14px monospace;line-height:14px;color:#aaa}</style>
+</head><body>
+<div id="screen"><div></div><canvas></canvas></div>
+<script src="/web/vpc-net.js"></script>
+<script src="/engines/v86/libv86.js"></script>
+<script>
+/*
+ * Плеер v86 (x86-эмулятор): Windows 95/98, DOS, Linux из образа диска картриджа.
+ * Сетевая карта NE2000 (порт 0x300, IRQ 10 по умолчанию) подключена к виртуальному коммутатору
+ * eth:<рабочая группа> на сервере Minecraft — IPX и TCP/IP между ПК игроков, как в настоящей локалке.
+ */
+(async () => {
+  const q = new URLSearchParams(location.search), id = q.get('cart'), net = q.get('net') || 'home';
+  const c = (await fetch('/api/carts').then(r => r.json())).find(x => x.id === id);
+  if (!c) { document.body.textContent = 'Картридж не найден: ' + id; return; }
+  document.title = c.name;
+  const v = c.v86 || {}, file = (n) => n && ({ url: `/carts/${id}/${n}`, async: !!v.async });
+  const cfg = {
+    wasm_path: '/engines/v86/v86.wasm',
+    bios: { url: '/engines/v86/seabios.bin' },
+    vga_bios: { url: '/engines/v86/vgabios.bin' },
+    memory_size: (v.memory || 64) * 1024 * 1024,
+    vga_memory_size: (v.vga_memory || 8) * 1024 * 1024,
+    hda: file(v.hda), cdrom: file(v.cdrom), fda: file(v.fda),
+    boot_order: v.boot_order,
+    initial_state: v.state ? { url: `/carts/${id}/${v.state}` } : undefined,
+    acpi: !!v.acpi,
+    autostart: true,
+    screen_container: document.getElementById('screen'),
+    net_device: { type: 'ne2k' },
+  };
+  for (const k of Object.keys(cfg)) if (cfg[k] === undefined) delete cfg[k];
+  const emu = window.emulator = new V86(cfg);
+  if (!c.net || c.net.mode !== 'none') {
+    const link = VPCNet.eth(net, (f) => emu.bus.send('net0-receive', f));
+    emu.add_listener('net0-send', (f) => link.send(f));
+  }
+  document.addEventListener('click', () => emu.lock_mouse && emu.lock_mouse());
+})();
+</script>
+</body></html>

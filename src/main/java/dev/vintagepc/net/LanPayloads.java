@@ -53,6 +53,17 @@ public final class LanPayloads {
         r.playToServer(SendC2S.TYPE, SendC2S.CODEC, LanHub::onSend);
         // Лямбда (а не ссылка на метод) — клиентский класс загрузится только при реальном вызове на клиенте.
         r.playToClient(DeliverS2C.TYPE, DeliverS2C.CODEC, (p, ctx) -> dev.vintagepc.client.LanBridge.onDeliver(p));
+
+        // Совместный экран (hotseat)
+        r.playToServer(PcPayloads.Leave.TYPE, PcPayloads.Leave.CODEC, PcSessions::onLeave);
+        r.playToServer(PcPayloads.Control.TYPE, PcPayloads.Control.CODEC, PcSessions::onControl);
+        r.playToServer(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, PcSessions::onFrame);
+        r.playToServer(PcPayloads.Input.TYPE, PcPayloads.Input.CODEC, PcSessions::onInput);
+        r.playToClient(PcPayloads.Open.TYPE, PcPayloads.Open.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onOpen(p));
+        r.playToClient(PcPayloads.Closed.TYPE, PcPayloads.Closed.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onClosed(p));
+        r.playToClient(PcPayloads.State.TYPE, PcPayloads.State.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onState(p));
+        r.playToClient(PcPayloads.Frame.TYPE, PcPayloads.Frame.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onFrame(p));
+        r.playToClient(PcPayloads.Input.TYPE, PcPayloads.Input.CODEC, (p, ctx) -> dev.vintagepc.client.PcClient.onInput(p));
     }
 
     private LanPayloads() {}

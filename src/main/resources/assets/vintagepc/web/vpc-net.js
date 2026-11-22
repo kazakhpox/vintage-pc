@@ -1,25 +1,23 @@
 /*
- * VPCNet — сеть Vintage PC. Работает и в оболочке, и в любой игре, открытой из неё
- * (оболочка передаёт ?ws=PORT&token=...&net=ИМЯ_СЕТИ в URL).
+ * VPCNet — сеть Vintage PC. Подключается к моду по ws://<этот же хост>/lan (cookie-токен),
+ * поэтому работает в оболочке и в любой игре-картридже, открытой с того же локального сервера.
  *
- *   VPCNet.join('room:lobby', (data, sender) => ...)   // data: Uint8Array
- *   VPCNet.send('room:lobby', bytes | string)
- *   const r = VPCNet.room('chat');  r.on(obj => ...); r.send({text:'hi'})   // JSON-обёртка
- *   VPCNet.eth(netName, frame => ...) → { send(frame) }                    // сырые Ethernet-кадры
- *   VPCNet.udp(roomName) → виртуальный UDP с IP 10.98.x.y для WASM-портов игр
+ * Одна модель для всего: рабочая группа = виртуальный Ethernet-сегмент "eth:<группа>",
+ * а сервер Minecraft — обучаемый L2-коммутатор (unicast идёт только адресату, не всем).
  *
- * Все пакеты идут: страница → ws://127.0.0.1 (мод) → пакеты Minecraft → сервер → другие игроки.
+ *   VPCNet.room(name)                 — JSON-сообщения всем (чат, лобби, простые JS-игры)
+ *   VPCNet.eth(net, onFrame)          — сырые кадры (v86 / NE2000)
+ *   VPCNet.udp(net, port, onPacket)   — UDP/IPv4 поверх того же Ethernet (WASM-порты Quake/Xash и т.п.)
+ *   VPCNet.humbleNet(net)             — сетевой бэкенд js-dos 8 (IPX DOSBox) поверх Ethernet
  */
 (function () {
-  const q = new URLSearchParams(location.search);
   const enc = new TextEncoder(), dec = new TextDecoder();
-  const subs = new Map();            // канал → Set(callback)
-  const status = new Set();
-  let ws = null, player = q.get('player') || 'offline', online = false;
+  const subs = new Map(), status = new Set();
+  let ws = null, player = 'offline', online = false;
+  const q = new URLSearchParams(location.search);
 
   function connect() {
-    if (!q.get('ws')) return;
-    ws = new WebSocket(`ws://127.0.0.1:${q.get('ws')}/lan?token=${q.get('token')}`);
+    ws = new WebSocket(`ws://${location.host}/lan`);
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => subs.forEach((_, ch) => ws.send(JSON.stringify({ op: 'join', ch })));
     ws.onmessage = (ev) => {
@@ -40,12 +38,27 @@
     ws.onclose = () => { online = false; status.forEach(f => f({ player, online })); setTimeout(connect, 2000); };
   }
 
+  const safe = (s) => String(s).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 40) || 'default';
+  const fnv = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+  const BCAST = new Uint8Array([255, 255, 255, 255, 255, 255]);
+  const sameMac = (a, o, b) => { for (let i = 0; i < 6; i++) if (a[o + i] !== b[i]) return false; return true; };
+  const ipStr = (n) => [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.');
+  const ipNum = (s) => s.split('.').reduce((a, x) => ((a << 8) | +x) >>> 0, 0);
+  const macForIp = (ip) => new Uint8Array([2, 0x56, 0x50, (ip >>> 16) & 255, (ip >>> 8) & 255, ip & 255]);
+
+  function frame(dst, src, type, payload) {
+    const f = new Uint8Array(14 + payload.length);
+    f.set(dst, 0); f.set(src, 6); f[12] = type >> 8; f[13] = type & 255; f.set(payload, 14);
+    return f;
+  }
+
   const api = {
     get player() { return player; },
     get online() { return online; },
-    get available() { return !!q.get('ws'); },
-    params: () => `ws=${q.get('ws') || ''}&token=${q.get('token') || ''}`,
+    pc: q.get('pc') || 'pc',
+    net: q.get('net'),
     onStatus(f) { status.add(f); f({ player, online }); },
+
     join(ch, f) {
       if (!subs.has(ch)) {
         subs.set(ch, new Set());
@@ -67,44 +80,114 @@
       ws.send(out);
       return true;
     },
+    control(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); },
+
     room(name) {
       const ch = 'room:' + safe(name), fns = new Set();
       const off = api.join(ch, (d, sender) => { let m; try { m = JSON.parse(dec.decode(d)); } catch { return; } fns.forEach(f => f(m, sender)); });
       return { send: (obj) => api.send(ch, JSON.stringify(obj)), on: (f) => fns.add(f), close: off };
     },
+
     eth(net, onFrame) {
       const ch = 'eth:' + safe(net);
       const off = api.join(ch, (d) => onFrame(d));
-      return { send: (frame) => api.send(ch, frame), close: off };
+      return { send: (f) => api.send(ch, f), close: off };
     },
-    /* Виртуальный UDP: заголовок [srcIP4][srcPort2][dstIP4][dstPort2] + данные. dstIP 255.255.255.255 — broadcast. */
-    udp(name, onPacket) {
-      const ch = 'room:udp-' + safe(name), me = api.virtualIp();
-      const off = api.join(ch, (d) => {
-        const v = new DataView(d.buffer, d.byteOffset);
-        const dst = v.getUint32(6);
-        if (dst !== me && dst !== 0xFFFFFFFF) return;
-        onPacket({ srcIp: ipStr(v.getUint32(0)), srcPort: v.getUint16(4), dstPort: v.getUint16(10), data: d.subarray(12) });
+
+    /** Стабильный виртуальный IP 10.98.x.y для этого игрока и ПК. */
+    virtualIp() {
+      const h = fnv(player + '/' + api.pc);
+      return ((10 << 24) | (98 << 16) | (((h >>> 8) & 255) << 8) | (1 + (h & 255) % 254)) >>> 0;
+    },
+
+    /**
+     * UDP поверх виртуального Ethernet: настоящие заголовки IPv4/UDP, MAC вычисляется из IP,
+     * отвечаем на ARP — так что и Windows внутри v86 видит такой «компьютер».
+     */
+    udp(net, port, onPacket) {
+      const me = api.virtualIp(), myMac = macForIp(me);
+      const link = api.eth(net, (f) => {
+        const type = (f[12] << 8) | f[13];
+        if (type === 0x0806 && f.length >= 42 && ((f[20] << 8) | f[21]) === 1) {          // ARP-запрос «кто 10.98.x.y?»
+          const v = new DataView(f.buffer, f.byteOffset);
+          if (v.getUint32(38) !== me) return;
+          const r = new Uint8Array(28), rv = new DataView(r.buffer);
+          rv.setUint16(0, 1); rv.setUint16(2, 0x0800); r[4] = 6; r[5] = 4; rv.setUint16(6, 2);
+          r.set(myMac, 8); rv.setUint32(14, me); r.set(f.subarray(22, 28), 18); r.set(f.subarray(28, 32), 24);
+          link.send(frame(f.subarray(6, 12), myMac, 0x0806, r));
+          return;
+        }
+        if (type !== 0x0800 || f.length < 42 || f[23] !== 17) return;
+        const v = new DataView(f.buffer, f.byteOffset);
+        const ihl = (f[14] & 15) * 4, dst = v.getUint32(30), u = 14 + ihl;
+        if (dst !== me && dst !== 0xFFFFFFFF && (dst & 0xFF) !== 0xFF) return;
+        const dport = v.getUint16(u + 2);
+        if (port && dport !== port) return;
+        const len = v.getUint16(u + 4);
+        onPacket({ srcIp: ipStr(v.getUint32(26)), srcPort: v.getUint16(u), dstPort: dport, data: f.slice(u + 8, u + len) });
       });
       return {
         ip: ipStr(me),
-        sendto(ip, port, data, srcPort = port) {
-          const p = new Uint8Array(12 + data.length), v = new DataView(p.buffer);
-          v.setUint32(0, me); v.setUint16(4, srcPort); v.setUint32(6, ipNum(ip)); v.setUint16(10, port);
-          p.set(data, 12);
-          return api.send(ch, p);
+        sendto(ip, dport, data, sport = port || dport) {
+          const dst = typeof ip === 'number' ? ip : ipNum(ip);
+          const ipH = new Uint8Array(20 + 8 + data.length), v = new DataView(ipH.buffer);
+          v.setUint8(0, 0x45); v.setUint16(2, ipH.length); v.setUint8(8, 64); v.setUint8(9, 17);
+          v.setUint32(12, me); v.setUint32(16, dst);
+          let sum = 0; for (let i = 0; i < 20; i += 2) sum += v.getUint16(i);
+          while (sum >> 16) sum = (sum & 0xFFFF) + (sum >> 16);
+          v.setUint16(10, ~sum & 0xFFFF);
+          v.setUint16(20, sport); v.setUint16(22, dport); v.setUint16(24, 8 + data.length);
+          ipH.set(data, 28);
+          const bcast = dst === 0xFFFFFFFF || (dst & 0xFF) === 0xFF;
+          return link.send(frame(bcast ? BCAST : macForIp(dst), myMac, 0x0800, ipH));
         },
-        close: off,
+        close: link.close,
       };
     },
-    virtualIp() { // 10.98.x.y — стабильный адрес по нику игрока
-      let h = 2166136261; for (const c of player) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
-      return ((10 << 24) | (98 << 16) | ((h >>> 8) & 0xFF) << 8 | (1 + (h & 0xFF) % 254)) >>> 0;
+
+    /**
+     * Сетевой бэкенд для js-dos 8 (интерфейс sharedNet / HumbleNet): peerId ↔ MAC 02:4A:xx:xx:xx:xx,
+     * кадры EtherType 0x88B5 (данные) и 0x88B6 (поиск хоста по имени). DOSBox гоняет через него IPX.
+     */
+    humbleNet(net, salt = '') {
+      const peerId = (fnv(player + '/' + api.pc + '/' + salt) & 0x7FFFFFFF) || 1;
+      const mac = (id) => new Uint8Array([2, 0x4A, (id >>> 24) & 255, (id >>> 16) & 255, (id >>> 8) & 255, id & 255]);
+      const myMac = mac(peerId), queue = [], aliases = new Set(), pending = new Map();
+      const link = api.eth(net, (f) => {
+        const type = (f[12] << 8) | f[13], v = new DataView(f.buffer, f.byteOffset);
+        if (f[6] !== 2 || f[7] !== 0x4A) return;
+        const from = v.getUint32(8);
+        if (type === 0x88B5 && sameMac(f, 0, myMac)) { queue.push({ peerId: from, data: f.slice(14) }); n.connected.add(from); }
+        if (type === 0x88B6) {
+          const m = JSON.parse(dec.decode(f.subarray(14)));
+          if (m.q && aliases.has(m.q)) link.send(frame(f.subarray(6, 12), myMac, 0x88B6, enc.encode(JSON.stringify({ a: m.q }))));
+          if (m.a && pending.has(m.a)) pending.get(m.a).push({ alias: m.a, peerId: from });
+        }
+      });
+      const n = {
+        peerId, connected: new Set(),
+        wait() {},
+        sendBinary(data, to) {
+          if (to === peerId || to === 0) throw new Error('Cannot send to self');
+          n.connected.add(to);
+          return link.send(frame(mac(to), myMac, 0x88B5, new Uint8Array(data))) ? data.byteLength : 0;
+        },
+        recvBinary() { return queue.shift() || null; },
+        disconnect(id) { n.connected.delete(id); },
+        shutdown() { link.close(); },
+        registerAlias(a) { aliases.add(a); return Promise.resolve(); },
+        unregisterAlias(a) { aliases.delete(a); },
+        queryAliases(qs) {
+          const name = qs.replace(/^=/, '');
+          if (aliases.has(name)) return Promise.resolve([{ alias: name, peerId }]);
+          pending.set(name, []);
+          link.send(frame(BCAST, myMac, 0x88B6, enc.encode(JSON.stringify({ q: name }))));
+          return new Promise(ok => setTimeout(() => { const r = pending.get(name) || []; pending.delete(name); ok(r); }, 700));
+        },
+      };
+      return n;
     },
   };
-  function safe(s) { return String(s).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 40) || 'default'; }
-  function ipStr(n) { return [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.'); }
-  function ipNum(s) { return s.split('.').reduce((a, x) => ((a << 8) | +x) >>> 0, 0); }
 
   window.VPCNet = api;
   connect();

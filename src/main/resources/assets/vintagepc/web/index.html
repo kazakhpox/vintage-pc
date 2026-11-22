@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Vintage PC</title>
-<link rel="stylesheet" href="lib/98.css">
-<link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="/web/lib/98.css">
+<link rel="stylesheet" href="/web/shell.css">
 </head>
 <body>
 <div id="desktop"></div>
@@ -18,17 +18,15 @@
   <div id="tasks"></div>
   <div id="tray" class="status-bar-field"><span id="netled" title="Сеть">🖧</span> <span id="clock"></span></div>
 </div>
-<!-- Классические скрипты, не ES-модули: file:// в Chromium не грузит модули -->
-<script src="vpc-net.js"></script>
-<script src="shell.js"></script>
-<script src="apps/notepad.js"></script>
-<script src="apps/minesweeper.js"></script>
-<script src="apps/network.js"></script>
-<script src="apps/chat.js"></script>
-<script src="apps/tictactoe.js"></script>
-<script src="apps/v86.js"></script>
-<script src="../games/games.js" onerror="window.VPC_GAMES=[]"></script>
-<script src="apps/games.js"></script>
+<script src="/web/vpc-net.js"></script>
+<script src="/web/shell.js"></script>
+<script src="/web/apps/notepad.js"></script>
+<script src="/web/apps/minesweeper.js"></script>
+<script src="/web/apps/network.js"></script>
+<script src="/web/apps/chat.js"></script>
+<script src="/web/apps/tictactoe.js"></script>
+<script src="/web/apps/winamp.js"></script>
+<script src="/web/apps/carts.js"></script>
 <script>VPC.boot();</script>
 </body>
 </html>

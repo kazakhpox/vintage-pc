@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>DOS</title>
+<link rel="stylesheet" href="/web/lib/98.css"><link rel="stylesheet" href="/engines/js-dos/js-dos.css"><link rel="stylesheet" href="/web/player.css">
+</head><body>
+<div id="screen"></div>
+<div id="lobby" hidden><div class="window"><div class="title-bar"><div class="title-bar-text" id="ltitle">Сетевая игра</div></div>
+  <div class="window-body">
+    <p>Игра поддерживает IPX. Рабочая группа: <b id="lnet"></b></p>
+    <button id="host">Создать игру (я — сервер)</button> <button id="solo">Одиночная игра</button>
+    <p>Или подключиться к игре в сети:</p><ul id="hosts"><li style="color:gray;cursor:default">поиск…</li></ul>
+  </div></div></div>
+<script src="/web/vpc-net.js"></script>
+<script src="/engines/js-dos/js-dos.js"></script>
+<script>
+/*
+ * Плеер DOS-картриджей (js-dos 8). Сеть: собственный sharedNet (VPCNet.humbleNet) вместо WebRTC —
+ * IPX-пакеты DOSBox идут кадрами Ethernet через коммутатор на сервере Minecraft.
+ * Лобби: хосты объявляют себя в комнате ipx-<группа>-<картридж>.
+ */
+(async () => {
+  const q = new URLSearchParams(location.search), id = q.get('cart'), net = q.get('net') || 'home';
+  const carts = await fetch('/api/carts').then(r => r.json());
+  const c = carts.find(x => x.id === id);
+  if (!c) { document.body.textContent = 'Картридж не найден: ' + id; return; }
+  document.title = c.name;
+  const dos = c.jsdos || {};
+  const url = dos.bundle ? `/carts/${id}/${dos.bundle}` : `/carts/${id}/__bundle.jsdos`;
+  const base = { url, pathPrefix: '/engines/js-dos/emulators/', kiosk: true, autoStart: true, noCloud: true, volume: 0.7 };
+
+  const start = (opts = {}) => {
+    document.getElementById('lobby').hidden = true;
+    window.dosProps = Dos(document.getElementById('screen'), Object.assign({}, base, opts));
+  };
+  if (!c.net || c.net.mode !== 'ipx') return start();
+
+  // ---- Лобби IPX ----
+  const lobby = VPCNet.room(`ipx-${net}-${id}`), hosts = new Map();
+  const ui = { lobby: document.getElementById('lobby'), list: document.getElementById('hosts') };
+  document.getElementById('lnet').textContent = net;
+  document.getElementById('ltitle').textContent = c.name + ' — сетевая игра';
+  ui.lobby.hidden = false;
+  let mode = null, net0 = null;
+  lobby.on((m) => {
+    if (m.t === 'host') { hosts.set(m.peerId, { name: m.name, seen: Date.now() }); render(); }
+    if (m.t === 'ask' && mode === 'host') announce();
+  });
+  const announce = () => lobby.send({ t: 'host', peerId: net0.peerId, name: VPCNet.player });
+  function render() {
+    if (mode) return;
+    const live = [...hosts].filter(([, h]) => Date.now() - h.seen < 6000);
+    ui.list.replaceChildren(...(live.length ? live.map(([pid, h]) => Object.assign(document.createElement('li'), {
+      textContent: `🖥️ ${h.name}`, onclick: () => { mode = 'client'; net0 = VPCNet.humbleNet(net, id); start({ sharedNet: net0, connectIpxAddress: String(pid) }); },
+    })) : [Object.assign(document.createElement('li'), { textContent: 'пока никого — создайте игру', style: 'color:gray;cursor:default' })]));
+  }
+  setInterval(() => { if (mode === 'host') announce(); else { lobby.send({ t: 'ask' }); render(); } }, 2000);
+  lobby.send({ t: 'ask' });
+  document.getElementById('host').onclick = () => {
+    mode = 'host'; net0 = VPCNet.humbleNet(net, id); announce();
+    start({ sharedNet: net0, startIpxServer: true });
+  };
+  document.getElementById('solo').onclick = () => { mode = 'solo'; start(); };
+})();
+</script>
+</body></html>

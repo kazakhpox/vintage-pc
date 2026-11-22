@@ -3,6 +3,7 @@ package dev.vintagepc;
 import dev.vintagepc.block.RetroPcBlock;
 import dev.vintagepc.net.LanHub;
 import dev.vintagepc.net.LanPayloads;
+import dev.vintagepc.net.PcSessions;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -42,5 +43,6 @@ public final class VintagePC {
             if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) e.accept(RETRO_PC_ITEM);
         });
         LanHub.init(NeoForge.EVENT_BUS);
+        PcSessions.init(NeoForge.EVENT_BUS);
     }
 }

@@ -4,7 +4,7 @@
   let z = 10, wid = 0;
   const $ = (s) => document.querySelector(s);
   const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); kids.forEach(k => e.append(k)); return e; };
-  const pcId = new URLSearchParams(location.search).get('pc') || 'pc';
+  const pcId = VPCNet.pc;
 
   const VPC = {
     el, pcId,
@@ -18,6 +18,8 @@
     set netName(v) { VPC.store.set('net', v); },
 
     register(app) { apps.push(app); },
+    /** Асинхронные источники ярлыков (картриджи) — ждём их перед отрисовкой рабочего стола. */
+    pending: [],
 
     window({ title, icon = '🗔', width = 420, height = 320, onClose }) {
       const id = ++wid;
@@ -70,7 +72,16 @@
       return new Promise((ok, fail) => document.head.append(el('script', { src, onload: ok, onerror: () => fail(new Error('Нет файла ' + src)) })));
     },
 
-    boot() {
+    frame(w, src) {
+      w.body.style.margin = '0';
+      const f = el('iframe', { src, allow: 'autoplay; fullscreen; gamepad; pointer-lock; cross-origin-isolated' });
+      w.body.append(f);
+      setTimeout(() => f.focus(), 100);
+      return f;
+    },
+
+    async boot() {
+      await Promise.allSettled(VPC.pending);
       const desk = $('#desktop'), menu = $('#startitems');
       for (const a of apps) {
         const ic = el('div', { className: 'icon', title: a.name }, el('span', { className: 'glyph', textContent: a.icon }), el('span', { textContent: a.name }));
@@ -79,6 +90,13 @@
         if (a.desktop !== false) desk.append(ic);
         menu.append(el('li', { onclick: () => { $('#startmenu').hidden = true; a.open(); } }, el('span', { textContent: a.icon }), el('span', { textContent: a.name })));
       }
+      menu.append(el('hr'), el('li', { onclick: () => {
+        $('#startmenu').hidden = true;
+        const w = VPC.window({ title: 'Завершение работы Windows', icon: '⏻', width: 340, height: 150 });
+        w.body.append(el('p', { textContent: 'Выключить компьютер? Все запущенные программы будут закрыты.' }),
+          el('button', { textContent: 'Да', onclick: () => VPCNet.control({ op: 'shutdown', pc: pcId }) }), ' ',
+          el('button', { textContent: 'Отмена', onclick: () => w.close() }));
+      } }, el('span', { textContent: '⏻' }), el('span', { textContent: 'Завершение работы…' })));
       $('#startbtn').onclick = (e) => { e.stopPropagation(); $('#startmenu').hidden = !$('#startmenu').hidden; };
       document.addEventListener('mousedown', (e) => { if (!e.target.closest('#startmenu,#startbtn')) $('#startmenu').hidden = true; });
       const tick = () => $('#clock').textContent = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });

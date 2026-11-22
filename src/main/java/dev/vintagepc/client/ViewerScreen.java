@@ -1,0 +1,159 @@
+package dev.vintagepc.client;
+
+import com.mojang.blaze3d.platform.NativeImage;
+import dev.vintagepc.VintagePC;
+import dev.vintagepc.net.PcPayloads;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.stb.STBImage;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Зритель чужого ПК (hotseat): видит трансляцию экрана хоста; F8 — взять/отдать управление,
+ * тогда мышь и клавиатура уходят на ПК хоста. MCEF зрителю не нужен.
+ */
+final class ViewerScreen extends Screen implements PcScreenMarker {
+    private static final int M = PcScreen.MARGIN;
+    private static final ResourceLocation TEX = VintagePC.id("dynamic/pc_viewer");
+    private static final ExecutorService decoder = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "VintagePC-decoder");
+        t.setDaemon(true);
+        return t;
+    });
+
+    private final BlockPos pos;
+    private final String hostName;
+    private String controller = "";
+    private int viewers;
+    private DynamicTexture texture;
+    private int texW, texH;
+    private int frameId = -1, got, total;
+    private ByteArrayOutputStream parts = new ByteArrayOutputStream();
+    private long lastMove;
+
+    ViewerScreen(BlockPos pos, String hostName) {
+        super(Component.translatable("block.vintagepc.retro_pc"));
+        this.pos = pos;
+        this.hostName = hostName;
+    }
+
+    @Override public BlockPos pos() { return pos; }
+
+    void setState(String controller, int viewers) { this.controller = controller; this.viewers = viewers; }
+
+    private boolean inControl() {
+        return minecraft != null && minecraft.player != null && controller.equals(minecraft.player.getGameProfile().getName());
+    }
+
+    void acceptChunk(PcPayloads.Frame f) {
+        if (f.frame() != frameId) { frameId = f.frame(); got = 0; total = f.total(); parts = new ByteArrayOutputStream(); }
+        if (f.index() != got) { frameId = -1; return; } // потеря/перестановка — ждём следующий кадр
+        parts.writeBytes(f.data());
+        if (++got < total) return;
+        byte[] jpg = parts.toByteArray();
+        frameId = -1;
+        decoder.execute(() -> decode(jpg));
+    }
+
+    private void decode(byte[] jpg) {
+        ByteBuffer src = MemoryUtil.memAlloc(jpg.length).put(jpg).flip();
+        try (MemoryStack st = MemoryStack.stackPush()) {
+            IntBuffer w = st.mallocInt(1), h = st.mallocInt(1), c = st.mallocInt(1);
+            ByteBuffer px = STBImage.stbi_load_from_memory(src, w, h, c, 4);
+            if (px == null) return;
+            int W = w.get(0), H = h.get(0);
+            NativeImage img = new NativeImage(NativeImage.Format.RGBA, W, H, false);
+            px.order(ByteOrder.LITTLE_ENDIAN);
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++) img.setPixelRGBA(x, y, px.getInt((y * W + x) * 4)); // RGBA байты = ABGR int
+            STBImage.stbi_image_free(px);
+            Minecraft.getInstance().execute(() -> upload(img));
+        } finally {
+            MemoryUtil.memFree(src);
+        }
+    }
+
+    private void upload(NativeImage img) {
+        if (minecraft == null || minecraft.screen != this) { img.close(); return; }
+        if (texture == null || texW != img.getWidth() || texH != img.getHeight()) {
+            if (texture != null) minecraft.getTextureManager().release(TEX);
+            texture = new DynamicTexture(img);
+            texW = img.getWidth(); texH = img.getHeight();
+            minecraft.getTextureManager().register(TEX, texture);
+        } else {
+            texture.setPixels(img);
+            texture.upload();
+        }
+    }
+
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        g.fill(0, 0, width, height, 0xFF2B2A26);
+        g.fill(M - 2, M - 2, width - M + 2, height - M + 2, 0xFF000000);
+        if (texture != null) g.blit(TEX, M, M, width - 2 * M, height - 2 * M, 0, 0, texW, texH, texW, texH);
+        else g.drawCenteredString(font, Component.translatable("vintagepc.viewer_wait", hostName), width / 2, height / 2, 0xFFFFFF);
+
+        Component status = inControl()
+                ? Component.translatable("vintagepc.viewer_control", hostName)
+                : Component.translatable("vintagepc.viewer_watch", hostName, controller.isEmpty() ? hostName : controller);
+        int w = font.width(status) + 8;
+        g.fill(M, 0, M + w, M + 2, 0xC0000000);
+        g.drawString(font, status, M + 4, 0, inControl() ? 0x80FF80 : 0xFFFFFF);
+    }
+
+    private float nx(double x) { return (float) Math.max(0, Math.min(1, (x - M) / (width - 2.0 * M))); }
+    private float ny(double y) { return (float) Math.max(0, Math.min(1, (y - M) / (height - 2.0 * M))); }
+
+    private void input(int kind, int a, int b, int c, double x, double y) {
+        if (inControl()) PcClient.send(new PcPayloads.Input(pos, kind, a, b, c, nx(x), ny(y)));
+    }
+
+    @Override public void renderBackground(GuiGraphics g, int mx, int my, float pt) {}
+    @Override public boolean isPauseScreen() { return false; }
+    @Override public boolean shouldCloseOnEsc() { return false; }
+
+    @Override public boolean mouseClicked(double x, double y, int btn) { input(3, btn, 0, 0, x, y); return true; }
+    @Override public boolean mouseReleased(double x, double y, int btn) { input(4, btn, 0, 0, x, y); return true; }
+    @Override public boolean mouseDragged(double x, double y, int btn, double dx, double dy) { mouseMoved(x, y); return true; }
+    @Override public boolean mouseScrolled(double x, double y, double sx, double sy) { input(6, (int) (sy * 100), 0, 0, x, y); return true; }
+
+    @Override
+    public void mouseMoved(double x, double y) {
+        long now = System.currentTimeMillis();
+        if (now - lastMove < 33) return; // не чаще 30 раз в секунду
+        lastMove = now;
+        input(5, 0, 0, 0, x, y);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int mods) {
+        if (key == GLFW.GLFW_KEY_ESCAPE && (mods & GLFW.GLFW_MOD_SHIFT) != 0) { onClose(); return true; }
+        if (key == GLFW.GLFW_KEY_F8) { PcClient.send(new PcPayloads.Control(pos, !inControl())); return true; }
+        input(0, key, scan, mods, 0, 0);
+        return true;
+    }
+
+    @Override public boolean keyReleased(int key, int scan, int mods) { input(1, key, scan, mods, 0, 0); return true; }
+    @Override public boolean charTyped(char ch, int mods) { input(2, ch, 0, mods, 0, 0); return true; }
+
+    @Override
+    public void removed() {
+        PcClient.send(new PcPayloads.Leave(pos));
+        if (texture != null && minecraft != null) minecraft.getTextureManager().release(TEX);
+        texture = null;
+    }
+}

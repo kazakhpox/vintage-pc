@@ -15,7 +15,7 @@ VPC.presence = (() => {
     });
     say(true);
   }
-  function say(ask = false) { room && room.send({ t: 'hello', pc: VPC.pcId, ip: VPCNet.udp ? ipOf() : '', apps: VPC.presence.hosting, ask }); }
+  function say(ask = false) { room && room.send({ t: 'hello', pc: VPC.pcId, ip: ipOf(), apps: VPC.presence.hosting, ask }); }
   function ipOf() { const n = VPCNet.virtualIp(); return [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.'); }
   setInterval(() => {
     if (VPC.netName !== net) rejoin(); else say();

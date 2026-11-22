@@ -2,6 +2,8 @@ package dev.vintagepc.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import dev.vintagepc.net.PcSessions;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -13,13 +15,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
-import java.util.function.Consumer;
-
 public class RetroPcBlock extends Block {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-
-    /** Ставится клиентской частью мода, чтобы общий код не тянул клиентские классы на сервер. */
-    public static Consumer<BlockPos> clientOpenHook = pos -> {};
 
     public RetroPcBlock(Properties props) {
         super(props);
@@ -38,7 +35,14 @@ public class RetroPcBlock extends Block {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (level.isClientSide) clientOpenHook.accept(pos);
+        // Решение «хост или зритель» принимает сервер — он знает, кто уже сидит за этим ПК.
+        if (player instanceof ServerPlayer sp) PcSessions.use(sp, pos);
         return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+        if (!state.is(newState.getBlock()) && !level.isClientSide) PcSessions.removed(level, pos);
+        super.onRemove(state, level, pos, newState, moved);
     }
 }
