@@ -196,7 +196,7 @@ public final class PcSessions {
         if (card) for (long t : g.towers()) {
             BlockPos tp = BlockPos.of(t);
             String name = g.name(tp);
-            towers.add(new PcPayloads.Tower(t, name.isEmpty() ? "Wi-Fi " + NetTopology.hex(t).substring(0, 4).toUpperCase(java.util.Locale.ROOT) : name,
+            towers.add(new PcPayloads.Tower(t, name.isEmpty() ? "Wi-Fi " + NetTopology.hex(t * 0x9E3779B97F4A7C15L).substring(0, 4).toUpperCase(java.util.Locale.ROOT) : name,
                     (int) Math.sqrt(tp.distSqr(key.pos()))));
         }
         String sig = towers.toString() + card + target;
