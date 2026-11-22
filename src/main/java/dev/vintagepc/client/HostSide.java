@@ -38,7 +38,43 @@ final class HostSide {
     private static final Map<BlockPos, long[]> stats = new HashMap<>(); // [последний захват мс, последний опорный мс, crc, номер кадра]
     private static final AtomicBoolean busy = new AtomicBoolean();
 
+    private static boolean diagInstalled;
+
+    /** Ошибки загрузки и консоль страниц Chromium → logs/latest.log (только для страниц Vintage PC). */
+    static void installDiagnostics() {
+        if (diagInstalled) return;
+        diagInstalled = true;
+        try {
+            var client = com.cinemamod.mcef.MCEF.getClient();
+            client.addLoadHandler(new org.cef.handler.CefLoadHandlerAdapter() {
+                @Override public void onLoadEnd(org.cef.browser.CefBrowser b, org.cef.browser.CefFrame f, int status) {
+                    if (ours(f.getURL()) && f.isMain()) VintagePC.LOG.info("Vintage PC page loaded: {} (HTTP {})", strip(f.getURL()), status);
+                }
+                @Override public void onLoadError(org.cef.browser.CefBrowser b, org.cef.browser.CefFrame f, ErrorCode code, String text, String url) {
+                    if (!ours(url)) return;
+                    VintagePC.LOG.error("Vintage PC page failed: {} -> {} {}", strip(url), code, text);
+                    Minecraft.getInstance().execute(() -> {
+                        var p = Minecraft.getInstance().player;
+                        if (p != null) p.displayClientMessage(net.minecraft.network.chat.Component.translatable("vintagepc.load_error", String.valueOf(code)), false);
+                    });
+                }
+            });
+            client.addDisplayHandler(new org.cef.handler.CefDisplayHandlerAdapter() {
+                @Override public boolean onConsoleMessage(org.cef.browser.CefBrowser b, org.cef.CefSettings.LogSeverity level, String msg, String src, int line) {
+                    if (ours(src) || ours(b.getURL())) VintagePC.LOG.info("Vintage PC console [{}] {} ({}:{})", level, msg, strip(src), line);
+                    return false;
+                }
+            });
+        } catch (Throwable t) {
+            VintagePC.LOG.warn("Vintage PC: could not attach Chromium diagnostics", t);
+        }
+    }
+
+    private static boolean ours(String url) { return url != null && url.startsWith("http://127.0.0.1:"); }
+    private static String strip(String url) { return url == null ? "" : url.replaceAll("t=[0-9a-f]+", "t=***"); }
+
     static void open(BlockPos pos) {
+        installDiagnostics();
         Minecraft.getInstance().setScreen(new PcScreen(pos, LanBridge.shellUrl(PcClient.key(pos))));
     }
 

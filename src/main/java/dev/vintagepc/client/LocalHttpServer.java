@@ -23,8 +23,10 @@ import java.util.concurrent.Executors;
  *  - Range-запросы: образы дисков на гигабайты читаются кусками, а не целиком в память;
  *  - движки отдаются прямо из jar мода, без распаковки на диск.
  *
- * Защита: привязка к loopback, проверка заголовка Host (от DNS-rebinding) и секретный токен
- * (в первой ссылке ?t=..., дальше — HttpOnly cookie).
+ * Защита: привязка к loopback, проверка заголовка Host (от DNS-rebinding), а управление сетью
+ * (WebSocket) — только со страниц самого сервера (заголовок Origin) или по секретному токену.
+ * Статика отдаётся без cookie: встроенный Chromium MCEF на части систем не сохраняет cookie,
+ * и тогда страница грузилась без CSS/JS — «белый экран».
  */
 final class LocalHttpServer {
     static final Logger LOG = LoggerFactory.getLogger("vintagepc/http");
@@ -89,6 +91,7 @@ final class LocalHttpServer {
     }
 
     private static final int MAX_FRAME = 1 << 20;
+    private volatile int logged;
     private final ServerSocket server;
     private final String token;
     private final Router router;
@@ -144,11 +147,12 @@ final class LocalHttpServer {
 
                 if (!("127.0.0.1:" + port()).equals(h.get("host"))) { write(out, Response.text(421, "bad host"), method, h, false); return; }
                 boolean viaQuery = token.equals(query.get("t"));
-                if (!viaQuery && !token.equals(cookie(h.get("cookie"), "vpc_t"))) {
-                    write(out, Response.text(403, "forbidden"), method, h, false);
+                if ("websocket".equalsIgnoreCase(h.get("upgrade"))) {
+                    boolean trusted = viaQuery || origin().equals(h.get("origin")) || token.equals(cookie(h.get("cookie"), "vpc_t"));
+                    if (!trusted) { LOG.warn("WebSocket rejected: origin {}", h.get("origin")); write(out, Response.text(403, "forbidden"), method, h, false); return; }
+                    websocket(s, in, out, h, path, query);
                     return;
                 }
-                if ("websocket".equalsIgnoreCase(h.get("upgrade"))) { websocket(s, in, out, h, path, query); return; }
                 if (!method.equals("GET") && !method.equals("HEAD")) { write(out, Response.text(405, "method"), method, h, false); return; }
 
                 Response r;
@@ -159,6 +163,7 @@ final class LocalHttpServer {
                     r = Response.text(500, String.valueOf(e));
                 }
                 if (r == null) { LOG.warn("404 {}", path); r = Response.text(404, "not found: " + path); }
+                if (logged < 40) { logged++; LOG.info("GET {} -> {}", path, r.status()); } // первые запросы — для диагностики
                 boolean keep = write(out, r, method, h, viaQuery);
                 if (!keep || "close".equalsIgnoreCase(h.get("connection"))) return;
             }
